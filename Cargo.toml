@@ -1,5 +1,5 @@
 [package]
-name = "xray-profiler"
+name = "x-ray"
 homepage = "https://excelano.com/xray/"
 version = "0.1.0"
 edition = "2021"
@@ -11,8 +11,9 @@ readme = "README.md"
 keywords = ["csv", "profile", "stats", "tabular", "inspect"]
 categories = ["command-line-utilities", "text-processing"]
 
-# Crate name is xray-profiler (the plain `xray` name is a dormant 2018 crate);
-# the command everyone types stays `xray`.
+# Crate name is x-ray — the real word, and free because crates.io treats
+# `xray` (dormant 2018 crate) and `x-ray` as distinct names. The command
+# everyone types stays `xray`.
 [[bin]]
 name = "xray"
 path = "src/main.rs"

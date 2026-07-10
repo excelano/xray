@@ -1,6 +1,6 @@
 # xray — design
 
-**Status:** Active design, opened 2026-07-10. This session is carrying it forward. Command name: `xray` (x-family; you *x-ray* a file before you operate on it). The bare `xray` crate name is a dormant 2018 crate, so the crate publishes as **`xray-profiler`** with `[[bin]] name = "xray"` — the command everyone types is still `xray`. Repo: `excelano/xray`.
+**Status:** Active design, opened 2026-07-10. This session is carrying it forward. Command name: `xray` (x-family; you *x-ray* a file before you operate on it). The bare `xray` crate name is a dormant 2018 crate, so the crate publishes as **`x-ray`** — the real word, free because crates.io counts `xray` and `x-ray` as distinct names — with `[[bin]] name = "xray"`, so the command everyone types is still `xray`. Repo: `excelano/xray`.
 
 **One line:** a read-only profiler for a single delimited file — the "what *is* this?" you run first, before xled cleans it or xql queries it.
 
