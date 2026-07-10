@@ -28,6 +28,11 @@ serde_json = "1.0.150"
 [dev-dependencies]
 serde_json = "1"
 
+[package.metadata.dist]
+# The crate is `x-ray` (bare `xray` was taken), but the command, the Homebrew
+# formula, and every other package coordinate are `xray` — one name to type.
+formula = "xray"
+
 [package.metadata.deb]
 maintainer = "David M. Anderson <david.anderson@excelano.com>"
 extended-description = """
