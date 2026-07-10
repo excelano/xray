@@ -1,10 +1,14 @@
 //! xray — a read-only profiler for tabular data.
 //!
-//! Scaffold only. The profile battery, output format, and flag surface are
-//! being settled — see DESIGN.md. xray never writes: it observes a file and
-//! reports what it is, so xled can clean it and xql can query it.
+//! Films a delimited file and reports what it is (see DESIGN.md). xray never
+//! writes: it observes, so xled can clean and xql can query. This build renders
+//! the film and reading registers; findings, --refer, colour, and --json follow.
+
+mod render;
+mod scan;
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use clap::Parser;
 
@@ -12,19 +16,25 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(name = "xray", version, about, long_about = None)]
 struct Cli {
-    /// The CSV/DSV file to profile (omit to read from stdin — not yet wired).
-    file: Option<PathBuf>,
+    /// The CSV/DSV file to profile.
+    file: PathBuf,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
-    match cli.file {
-        Some(path) => {
-            eprintln!("xray: scaffold — profiling of {} is not implemented yet.", path.display());
-            eprintln!("See DESIGN.md; the profile battery and output format are being settled.");
+    match scan::scan(&cli.file) {
+        Ok(s) => {
+            let name = cli
+                .file
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| cli.file.display().to_string());
+            print!("{}", render::render(&name, &s));
+            ExitCode::SUCCESS
         }
-        None => {
-            eprintln!("xray: give me a file to profile (stdin not yet wired). See DESIGN.md.");
+        Err(e) => {
+            eprintln!("xray: cannot read {}: {e}", cli.file.display());
+            ExitCode::FAILURE
         }
     }
 }
