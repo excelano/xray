@@ -1,5 +1,12 @@
 # xray — backlog
 
+> **Release status (2026-07-10):** v0.1 core done, corpus-hardened, all release
+> plumbing committed (cargo-dist, install/deb/crates workflows, README,
+> SECURITY, 8 tests, clippy+fmt clean). **Next = Phase 2 release** per
+> `RELEASING.md`: create `excelano/xray` → push → tag `v0.1.0` (irreversible
+> crates.io publish) → deb → apt/homebrew. Then the items below.
+
+
 Open work after the v0.1 core (scan → film/reading/findings, `--refer`, colour,
 `--json`, buried-header, corpus-hardened). Grouped by kind; **P1** = do before
 calling v0.1 shippable, **P2** = wanted soon, **P3** = someday / decide-if-ever.
