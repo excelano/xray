@@ -33,10 +33,20 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
     // ---- FILM ----
     out.push_str(&paint(theme::HEADER, "FILM"));
     out.push('\n');
+    let header_desc = match scan.header_row {
+        0 => "header: none".to_string(),
+        1 => "header: row 1".to_string(),
+        n => format!(
+            "header: row {n} ({} preamble row{})",
+            scan.preamble,
+            if scan.preamble == 1 { "" } else { "s" }
+        ),
+    };
     out.push_str(&format!(
-        "  {} columns × {} rows       header: row 1       {}\n",
+        "  {} columns × {} rows       {}       {}\n",
         scan.columns.len(),
         scan.data_rows,
+        header_desc,
         human_size(scan.bytes),
     ));
     out.push_str(&format!(

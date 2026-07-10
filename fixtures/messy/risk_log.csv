@@ -1,0 +1,9 @@
+RISK LOG,,,,
+Project:,Atlas Migration,,,
+PM:,J. Rivera,,,
+,,,,
+,,,,
+ID,Risk,Owner,Likelihood,Impact
+R-01,Vendor delay,Rivera,High,High
+R-02,Scope creep,Chen,Medium,High
+R-03,Staffing gap,Okafor,Low,Medium

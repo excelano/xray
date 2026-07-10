@@ -42,6 +42,10 @@ struct Cli {
     #[arg(long)]
     json: bool,
 
+    /// Header row (1-based); 0 = no header. Omit to auto-detect a buried header.
+    #[arg(long, value_name = "ROW")]
+    header: Option<usize>,
+
     /// When to colourise: auto (default), always, or never.
     #[arg(long, value_name = "WHEN", default_value = "auto")]
     color: ColorWhen,
@@ -49,7 +53,7 @@ struct Cli {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    match scan::scan(&cli.file) {
+    match scan::scan(&cli.file, cli.header) {
         Ok(s) => {
             let name = cli
                 .file

@@ -209,12 +209,18 @@ pub struct Scan {
     pub data_rows: usize,
     pub ragged: Vec<(usize, usize)>, // (1-based file row, field count) where count != header width
     pub total_rows: Vec<(usize, String)>, // (1-based file row, a filled value) for summary/total lines
+    pub header_row: usize, // 1-based file row of the header; 0 = no header
+    pub preamble: usize,   // junk rows above a buried header (0 for a clean row-1 header)
     pub delimiter: u8,
     pub crlf: bool,
     pub bom: bool,
     pub utf8: bool,
     pub bytes: u64,
 }
+
+/// Where the header sits: None = auto-detect, Some(0) = the file has no header
+/// row, Some(n) = force the header to 1-based file row n.
+pub type HeaderChoice = Option<usize>;
 
 /// Sniff the delimiter from a byte sample: the candidate giving the most
 /// consistent field count (> 1) across the first lines wins.
@@ -240,9 +246,103 @@ fn sniff_delimiter(sample: &[u8]) -> u8 {
     best.0
 }
 
-/// Run the streaming pass. Assumes row 1 is the header (buried-header detection
-/// is a finding, layered later).
-pub fn scan(path: &Path) -> std::io::Result<Scan> {
+/// Count of non-blank fields in a record.
+fn filled(rec: &csv::StringRecord) -> usize {
+    rec.iter().filter(|c| !c.trim().is_empty()).count()
+}
+
+/// The modal record shape across a sample: the (fill-count, field-count) pair
+/// that recurs most, weighted toward rows that look like a real table body.
+fn modal_shape(sample: &[csv::StringRecord]) -> (usize, usize) {
+    let mut fill_freq: HashMap<usize, usize> = HashMap::new();
+    let mut width_freq: HashMap<usize, usize> = HashMap::new();
+    for rec in sample {
+        let f = filled(rec);
+        if f >= 2 {
+            *fill_freq.entry(f).or_insert(0) += 1;
+        }
+        if rec.len() >= 2 {
+            *width_freq.entry(rec.len()).or_insert(0) += 1;
+        }
+    }
+    let modal_fill = fill_freq.iter().max_by_key(|(_, &n)| n).map(|(&w, _)| w);
+    let modal_width = width_freq.iter().max_by_key(|(_, &n)| n).map(|(&w, _)| w);
+    (modal_fill.unwrap_or(0), modal_width.unwrap_or(0))
+}
+
+/// Locate the header row: the first row whose fill count reaches the table's
+/// modal width, per the corpus heuristic. Preamble rows are narrower and sit
+/// above it. Returns the 0-based index within the sample (0 = clean row-1
+/// header). Advisory — the `--header` override always wins.
+fn detect_header(sample: &[csv::StringRecord]) -> usize {
+    let (modal_fill, _) = modal_shape(sample);
+    if modal_fill < 2 {
+        return 0;
+    }
+    for (i, rec) in sample.iter().enumerate() {
+        if filled(rec) >= modal_fill {
+            return i;
+        }
+    }
+    0
+}
+
+/// Observe one data row: fold its cells into the column accumulators and flag
+/// raggedness and total-row signatures. `file_row` is 1-based.
+fn process_row(
+    rec: &csv::StringRecord,
+    width: usize,
+    file_row: usize,
+    columns: &mut [Column],
+    data_rows: &mut usize,
+    ragged: &mut Vec<(usize, usize)>,
+    total_rows: &mut Vec<(usize, String)>,
+) {
+    *data_rows += 1;
+    if rec.len() != width {
+        ragged.push((file_row, rec.len()));
+    }
+
+    // Total/summary-row signature: nearly all cells blank, but at least one
+    // numeric-looking cell filled (a "Total: $…" line masquerading as data).
+    let mut blanks = width.saturating_sub(rec.len());
+    let mut sample = String::new();
+    let mut has_number = false;
+    for field in rec.iter() {
+        let t = field.trim();
+        if t.is_empty() {
+            blanks += 1;
+        } else {
+            if sample.is_empty() {
+                sample = t.to_string();
+            }
+            if matches!(classify(field), Kind::Int | Kind::Decimal | Kind::Currency) {
+                has_number = true;
+                sample = t.to_string();
+            }
+        }
+    }
+    if width >= 4 && has_number && blanks >= width.saturating_sub(2) && total_rows.len() < 64 {
+        total_rows.push((file_row, sample));
+    }
+
+    for (c, field) in rec.iter().enumerate() {
+        if c < columns.len() {
+            columns[c].observe(field);
+        }
+    }
+    // Fields beyond the header width still count toward raggedness above.
+    for col in columns.iter_mut().skip(rec.len()) {
+        col.total += 1; // short row: missing cells count as blank
+    }
+}
+
+/// Run the streaming pass. Buffers a bounded look-ahead (preamble is always near
+/// the top) to locate the header, then streams the remainder as data.
+pub fn scan(path: &Path, header_choice: HeaderChoice) -> std::io::Result<Scan> {
+    /// How far to look for a buried header before giving up. Bounds the buffer.
+    const LOOKAHEAD: usize = 1000;
+
     let mut raw = Vec::new();
     File::open(path)?.read_to_end(&mut raw)?;
     let bytes = raw.len() as u64;
@@ -261,72 +361,82 @@ pub fn scan(path: &Path) -> std::io::Result<Scan> {
         .has_headers(false)
         .from_reader(body);
 
-    let mut records = rdr.records();
-    let header = match records.next() {
-        Some(r) => r?,
-        None => {
-            return Ok(Scan {
-                columns: Vec::new(),
-                data_rows: 0,
-                ragged: Vec::new(),
-                total_rows: Vec::new(),
-                delimiter,
-                crlf,
-                bom,
-                utf8,
-                bytes,
-            });
-        }
+    let empty = |header_row, preamble| Scan {
+        columns: Vec::new(),
+        data_rows: 0,
+        ragged: Vec::new(),
+        total_rows: Vec::new(),
+        header_row,
+        preamble,
+        delimiter,
+        crlf,
+        bom,
+        utf8,
+        bytes,
     };
-    let width = header.len();
-    let mut columns: Vec<Column> = header
-        .iter()
-        .map(|h| Column::new(h.to_string()))
-        .collect();
+
+    // Buffer the look-ahead window.
+    let mut records = rdr.records();
+    let mut buf: Vec<csv::StringRecord> = Vec::new();
+    for rec in records.by_ref() {
+        buf.push(rec?);
+        if buf.len() >= LOOKAHEAD {
+            break;
+        }
+    }
+    if buf.is_empty() {
+        return Ok(empty(0, 0));
+    }
+
+    // Resolve the header position from the choice.
+    let (header_present, header_idx) = match header_choice {
+        Some(0) => (false, 0),
+        Some(n) => (true, (n - 1).min(buf.len() - 1)),
+        None => (true, detect_header(&buf)),
+    };
+
+    let (header_fields, width): (Vec<String>, usize) = if header_present {
+        let h = &buf[header_idx];
+        (h.iter().map(|s| s.to_string()).collect(), h.len())
+    } else {
+        let (_, w) = modal_shape(&buf);
+        let w = w.max(buf[0].len());
+        (vec![String::new(); w], w)
+    };
+
+    let mut columns: Vec<Column> = header_fields.into_iter().map(Column::new).collect();
+    let header_row = if header_present { header_idx + 1 } else { 0 };
+    let preamble = if header_present { header_idx } else { 0 };
 
     let mut data_rows = 0usize;
     let mut ragged = Vec::new();
     let mut total_rows: Vec<(usize, String)> = Vec::new();
-    for (i, rec) in records.enumerate() {
+
+    // Buffered data rows (everything after the header within the window).
+    let data_start = if header_present { header_idx + 1 } else { 0 };
+    for pos in data_start..buf.len() {
+        process_row(
+            &buf[pos],
+            width,
+            pos + 1,
+            &mut columns,
+            &mut data_rows,
+            &mut ragged,
+            &mut total_rows,
+        );
+    }
+    // Streamed remainder (absolute index continues past the buffer).
+    for (offset, rec) in records.enumerate() {
         let rec = rec?;
-        data_rows += 1;
-        let file_row = i + 2; // 1-based, past the header
-        if rec.len() != width {
-            ragged.push((file_row, rec.len()));
-        }
-
-        // Total/summary-row signature: nearly all cells blank, but at least one
-        // numeric-looking cell filled (a "Total: $…" line masquerading as data).
-        let mut blanks = width.saturating_sub(rec.len()); // short rows: missing cells are blank
-        let mut sample = String::new();
-        let mut has_number = false;
-        for field in rec.iter() {
-            let t = field.trim();
-            if t.is_empty() {
-                blanks += 1;
-            } else {
-                if sample.is_empty() {
-                    sample = t.to_string();
-                }
-                if matches!(classify(field), Kind::Int | Kind::Decimal | Kind::Currency) {
-                    has_number = true;
-                    sample = t.to_string();
-                }
-            }
-        }
-        if width >= 4 && has_number && blanks >= width.saturating_sub(2) && total_rows.len() < 64 {
-            total_rows.push((file_row, sample));
-        }
-
-        for (c, field) in rec.iter().enumerate() {
-            if c < columns.len() {
-                columns[c].observe(field);
-            }
-        }
-        // Fields beyond the header width still count toward raggedness above.
-        for col in columns.iter_mut().skip(rec.len()) {
-            col.total += 1; // short row: missing cells count as blank
-        }
+        process_row(
+            &rec,
+            width,
+            buf.len() + offset + 1,
+            &mut columns,
+            &mut data_rows,
+            &mut ragged,
+            &mut total_rows,
+        );
     }
 
     Ok(Scan {
@@ -334,6 +444,8 @@ pub fn scan(path: &Path) -> std::io::Result<Scan> {
         data_rows,
         ragged,
         total_rows,
+        header_row,
+        preamble,
         delimiter,
         crlf,
         bom,

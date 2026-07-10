@@ -86,7 +86,7 @@ The synthetic torture fixture `fixtures/messy/vendor_spend.csv` exercises a cros
 1. ~~**`--json` shape.**~~ **Done.** Same three registers as the human render, as one model / two renderings; findings carry a stable machine `kind` and column letter; referral gated by `--refer`; always plain.
 2. **Flag surface (final).** Shipped: `--refer`, `--json`, `--color`, plus `--version`/`--help`. Not yet built: `--top N` (frequency depth) and `--sample N` (rows shown) — the depth knobs. Resist anything that's an xql query in disguise (`--where`, `--select`). A subset column selector is the one borderline case — decide.
 3. **Cardinality cap value.** The K where exact distinct-counts become `K+`. A corpus-tuning knob; pick a default (candidate: 10k) and how to label a capped count.
-4. **Buried-header heuristic.** The modal-width-jump rule (first row whose fill count jumps to the table's modal width is the suspected header). Threshold and false-positive behaviour tuned against the real corpus.
+4. ~~**Buried-header heuristic.**~~ **Built.** Modal-width-jump detection over a bounded look-ahead buffer; reports the header row + preamble in the film and a `buried_header` finding; `--header <N>` (0 = none) overrides. False-positive threshold still wants real-corpus tuning (a row-1 header with trailing-blank cells can mis-detect).
 5. **Bare-command / zero-config.** `xray file.csv` gives the full default profile — matches the family's "bare command reports state" reflex. Confirm no required flags.
 
 ## First move next session

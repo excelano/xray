@@ -2,10 +2,10 @@
 //! first. Reports damage; never fixes it (that's xled) and never filters it
 //! (that's xql). Every finding names what will bite a later step.
 //!
-//! Grounded in the corpus taxonomy (`~/xled-corpus/CORPUS-FINDINGS.md`). This
-//! slice implements the high-value checks the streaming scan already supports;
-//! buried headers, stacked/side-by-side tables, whitespace and smart-punct are
-//! layered in during the corpus-tuning pass.
+//! Grounded in the corpus taxonomy (`~/xled-corpus/CORPUS-FINDINGS.md`). Buried
+//! headers are detected in the scan; stacked/side-by-side tables, whitespace
+//! pad, smart-punct/HTML-entities, and multi-value newline cells are layered in
+//! during the corpus-tuning pass.
 
 use crate::resolve::{col_letter, resolve, Class};
 use crate::scan::Scan;
@@ -58,6 +58,20 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
     let width = scan.columns.len();
 
     // ---- correctness (row-level, not column-scoped) ----
+    if scan.preamble > 0 {
+        out.push(Finding {
+            group: Group::Correctness,
+            kind: "buried_header",
+            column: None,
+            subject: format!("buried header — row {}", scan.header_row),
+            detail: format!(
+                "row{} 1–{} {} preamble above the header; crop with xled before profiling",
+                if scan.preamble == 1 { "" } else { "s" },
+                scan.preamble,
+                if scan.preamble == 1 { "is" } else { "are" },
+            ),
+        });
+    }
     if !scan.ragged.is_empty() {
         let (row, fields) = scan.ragged[0];
         let more = if scan.ragged.len() > 1 {
