@@ -21,6 +21,8 @@ path = "src/main.rs"
 [dependencies]
 csv = "1"
 clap = { version = "4", features = ["derive"] }
+anstyle = "1.0.14"
+anstream = "1.0.0"
 
 [profile.dist]
 inherits = "release"

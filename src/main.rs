@@ -8,11 +8,23 @@ mod findings;
 mod render;
 mod resolve;
 mod scan;
+mod theme;
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::Parser;
+use anstream::{AutoStream, ColorChoice};
+use clap::{Parser, ValueEnum};
+
+/// When to colourise the output.
+#[derive(Clone, Copy, ValueEnum)]
+enum ColorWhen {
+    /// Colour for a terminal, plain when piped or read by a program (honours NO_COLOR).
+    Auto,
+    Always,
+    Never,
+}
 
 /// Profile a delimited file: columns, types, blanks, cardinality, top values.
 #[derive(Parser)]
@@ -24,6 +36,10 @@ struct Cli {
     /// Also suggest which family tool treats each finding (off by default).
     #[arg(long)]
     refer: bool,
+
+    /// When to colourise: auto (default), always, or never.
+    #[arg(long, value_name = "WHEN", default_value = "auto")]
+    color: ColorWhen,
 }
 
 fn main() -> ExitCode {
@@ -35,7 +51,14 @@ fn main() -> ExitCode {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| cli.file.display().to_string());
-            print!("{}", render::render(&name, &s, cli.refer));
+            let choice = match cli.color {
+                ColorWhen::Auto => ColorChoice::Auto,
+                ColorWhen::Always => ColorChoice::Always,
+                ColorWhen::Never => ColorChoice::Never,
+            };
+            let text = render::render(&name, &s, cli.refer);
+            let mut out = AutoStream::new(std::io::stdout(), choice);
+            let _ = out.write_all(text.as_bytes());
             ExitCode::SUCCESS
         }
         Err(e) => {

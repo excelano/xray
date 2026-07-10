@@ -4,6 +4,7 @@
 use crate::findings::{self, Group};
 use crate::resolve::{col_letter, resolve, Class};
 use crate::scan::Scan;
+use crate::theme::{self, paint};
 
 fn human_size(bytes: u64) -> String {
     if bytes < 1024 {
@@ -27,10 +28,11 @@ fn delim_name(d: u8) -> String {
 
 pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
     let mut out = String::new();
-    out.push_str(&format!("xray · {name}\n\n"));
+    out.push_str(&format!("{} · {name}\n\n", paint(theme::HEADER, "xray")));
 
     // ---- FILM ----
-    out.push_str("FILM\n");
+    out.push_str(&paint(theme::HEADER, "FILM"));
+    out.push('\n');
     out.push_str(&format!(
         "  {} columns × {} rows       header: row 1       {}\n",
         scan.columns.len(),
@@ -46,7 +48,9 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
     ));
 
     // ---- READING ----
-    out.push_str("\nREADING\n");
+    out.push('\n');
+    out.push_str(&paint(theme::HEADER, "READING"));
+    out.push('\n');
     let reads: Vec<_> = scan.columns.iter().map(resolve).collect();
     let name_w = scan
         .columns
@@ -90,13 +94,22 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
         } else {
             read.detail.clone()
         };
+        // Colour only the flag (line end) and the letter (padded outside the
+        // colour), never inside the width-aligned fields — so alignment holds
+        // whether anstream keeps the codes or strips them.
         let detail = match &read.flag {
-            Some(f) => format!("{:<24}  ! {}", base_detail, f),
+            Some(f) => format!("{:<24}  {}", base_detail, paint(theme::WARN, &format!("! {f}"))),
             None => base_detail,
         };
+        let letter = col_letter(i);
+        let letter_cell = format!(
+            "{}{}",
+            paint(theme::ACCENT, &letter),
+            " ".repeat(3usize.saturating_sub(letter.chars().count())),
+        );
         out.push_str(&format!(
-            "  {:<3}  {:<name_w$}  {:<ty_w$}  {:>3}%  {:>8}  {}\n",
-            col_letter(i),
+            "  {}  {:<name_w$}  {:<ty_w$}  {:>3}%  {:>8}  {}\n",
+            letter_cell,
             header,
             read.label,
             fill,
@@ -107,22 +120,28 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
 
     // ---- FINDINGS ----
     let fs = findings::findings(scan);
+    out.push('\n');
     out.push_str(&format!(
-        "\nFINDINGS  ({})   {}\n",
+        "{}  ({})   {}\n",
+        paint(theme::HEADER, "FINDINGS"),
         fs.len(),
-        findings::verdict(&fs),
+        paint(theme::FAINT, &findings::verdict(&fs)),
     ));
     let mut group: Option<Group> = None;
     for (n, f) in fs.iter().enumerate() {
         if group != Some(f.group) {
-            out.push_str(&format!("  {}\n", f.group.label()));
+            out.push_str(&format!("  {}\n", paint(theme::FAINT, f.group.label())));
             group = Some(f.group);
         }
+        let sev = match f.group {
+            Group::Correctness => theme::CRIT,
+            Group::TypeSafety => theme::WARN,
+            Group::Structure => theme::NOTE,
+        };
         out.push_str(&format!(
-            "  {:>2}  {} {} — {}\n",
+            "  {:>2}  {} — {}\n",
             n + 1,
-            f.group.glyph(),
-            f.subject,
+            paint(sev, &format!("{} {}", f.group.glyph(), f.subject)),
             f.detail,
         ));
     }
