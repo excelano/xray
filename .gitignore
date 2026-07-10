@@ -1,0 +1,7 @@
+/target
+Cargo.lock
+
+# Real client corpus must never enter this repo. Lives out-of-repo in ~/xled-corpus/.
+/corpus
+*.xlsx
+CORPUS-FINDINGS.md

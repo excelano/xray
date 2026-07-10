@@ -1,0 +1,20 @@
+[package]
+name = "xray"
+homepage = "https://excelano.com/xray/"
+version = "0.1.0"
+edition = "2021"
+description = "a read-only profiler for tabular data — what a CSV/DSV is, before you edit or query it"
+license = "MIT"
+authors = ["David M. Anderson"]
+repository = "https://github.com/excelano/xray"
+readme = "README.md"
+keywords = ["csv", "profile", "stats", "tabular", "inspect"]
+categories = ["command-line-utilities", "text-processing"]
+
+[dependencies]
+csv = "1"
+clap = { version = "4", features = ["derive"] }
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
