@@ -222,19 +222,24 @@ pub struct Scan {
 /// row, Some(n) = force the header to 1-based file row n.
 pub type HeaderChoice = Option<usize>;
 
-/// Sniff the delimiter from a byte sample: the candidate giving the most
-/// consistent field count (> 1) across the first lines wins.
+/// Sniff the delimiter by actually parsing the sample with each candidate
+/// (quote-aware, via the csv reader) and keeping the one that yields the most
+/// consistent field count > 1. Character-counting would be fooled by commas
+/// inside quoted fields — the common `"1,200.00"` case — and pick a stray
+/// delimiter that happens to recur evenly.
 fn sniff_delimiter(sample: &[u8]) -> u8 {
     const CANDIDATES: [u8; 4] = [b',', b'\t', b';', b'|'];
-    let text = String::from_utf8_lossy(sample);
-    let lines: Vec<&str> = text.lines().take(20).collect();
-    let mut best = (b',', 0usize, 0usize); // (delim, modal_count, lines_agreeing)
+    let mut best = (b',', 0usize, 0usize); // (delim, modal_fields, rows_agreeing)
     for &d in &CANDIDATES {
+        let mut rdr = csv::ReaderBuilder::new()
+            .delimiter(d)
+            .flexible(true)
+            .has_headers(false)
+            .from_reader(sample);
         let mut counts: HashMap<usize, usize> = HashMap::new();
-        for line in &lines {
-            let fields = line.matches(d as char).count() + 1;
-            if fields > 1 {
-                *counts.entry(fields).or_insert(0) += 1;
+        for rec in rdr.byte_records().take(50).flatten() {
+            if rec.len() > 1 {
+                *counts.entry(rec.len()).or_insert(0) += 1;
             }
         }
         // Deterministic tie-break: on equal agreement, prefer the larger modal
@@ -297,7 +302,11 @@ fn detect_header(sample: &[csv::StringRecord]) -> usize {
     // preamble (title/blank), not a near-full row. This rejects the false
     // positive where a real row-1 header has a couple of blank trailing cells
     // and full data rows below: that header is not sparse, so we keep row 1.
-    let sparse_cap = if modal_fill <= 4 { 1 } else { modal_fill / 2 };
+    // Preamble is a short title/label line (a few cells), in ABSOLUTE terms —
+    // not "less than half the modal". A relative cap scales up with wide data
+    // and wrongly demotes a real header when the data rows are ragged-wider than
+    // it (a common export shape), so cap preamble fill at a small constant.
+    let sparse_cap = if modal_fill <= 4 { 1 } else { 4 };
     let preamble_is_sparse = sample[..candidate].iter().all(|r| filled(r) <= sparse_cap);
     if preamble_is_sparse {
         candidate

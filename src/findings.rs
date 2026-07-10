@@ -212,13 +212,22 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                 subject: format!("{name} is constant"),
                 detail: format!("one value across {} rows", col.nonblank),
             });
-        } else if id_like && distinct < col.nonblank && distinct > 0 {
+        } else if id_like && distinct < col.nonblank && distinct * 10 >= col.nonblank * 9 {
+            // Only when the column is *near*-unique (≥90% distinct): that reads
+            // as a key with a few stray duplicates — a real hazard. A low-
+            // cardinality id-like column is a repeating reference, not a broken
+            // key, so it isn't flagged.
+            let dups = col.nonblank - distinct;
             out.push(Finding {
                 group: Group::Structure,
                 kind: "duplicate_key",
                 column: at.clone(),
-                subject: format!("{name} has duplicate values"),
-                detail: format!("{} values, {distinct} distinct — not a unique key", col.nonblank),
+                subject: format!("{name} looks like a key but has duplicates"),
+                detail: format!(
+                    "{dups} duplicate value{} across {} rows ({distinct} distinct)",
+                    if dups == 1 { "" } else { "s" },
+                    col.nonblank
+                ),
             });
         }
 

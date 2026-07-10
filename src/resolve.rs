@@ -63,6 +63,19 @@ fn count(col: &Column, k: Kind) -> usize {
     col.kinds.get(&k).copied().unwrap_or(0)
 }
 
+/// Which boolean spelling-family a value belongs to. A column that stays inside
+/// one family (all Y/N, or all true/false) is consistent; two families is the
+/// "mixed forms" hazard.
+fn bool_family(v: &str) -> u8 {
+    match v.trim().to_ascii_lowercase().as_str() {
+        "y" | "n" => 0,
+        "yes" | "no" => 1,
+        "true" | "false" => 2,
+        "t" | "f" => 3,
+        _ => 4,
+    }
+}
+
 fn trim_num(v: f64) -> String {
     if v.fract() == 0.0 {
         format!("{}", v as i64)
@@ -140,9 +153,13 @@ pub fn resolve(col: &Column) -> Resolved {
             ..base
         };
     }
-    // Booleans, flagged when the file mixes representations (Y / yes / true).
+    // Booleans, flagged only when the file mixes representation *families* —
+    // Y/N with yes/no, say. Y and N alone are the two values of one family, not
+    // mixed forms, so a plain Y/N column must not trip this.
     if booleans > 0 && booleans >= numeric && booleans >= text {
-        let mixed = col.bool_reprs.len() > 1;
+        let families: std::collections::HashSet<u8> =
+            col.bool_reprs.iter().map(|v| bool_family(v)).collect();
+        let mixed = families.len() > 1;
         return Resolved {
             class: Class::Bool,
             label: if mixed { "bool · mixed-repr" } else { "bool" }.into(),
