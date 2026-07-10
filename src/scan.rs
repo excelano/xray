@@ -383,11 +383,15 @@ pub fn scan(path: &Path, header_choice: HeaderChoice) -> std::io::Result<Scan> {
     let sample = &body[..body.len().min(16 * 1024)];
     let delimiter = sniff_delimiter(sample);
 
+    // Decode lossily so a stray invalid-UTF-8 byte becomes a reported encoding
+    // issue (the `utf8` flag above) rather than a fatal parse error. A profiler
+    // must survive the damage it exists to report. Zero-copy when already valid.
+    let body_text = String::from_utf8_lossy(body);
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(delimiter)
         .flexible(true)
         .has_headers(false)
-        .from_reader(body);
+        .from_reader(body_text.as_bytes());
 
     let empty = |header_row, preamble| Scan {
         columns: Vec::new(),
