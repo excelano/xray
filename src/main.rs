@@ -4,7 +4,9 @@
 //! writes: it observes, so xled can clean and xql can query. This build renders
 //! the film and reading registers; findings, --refer, colour, and --json follow.
 
+mod findings;
 mod render;
+mod resolve;
 mod scan;
 
 use std::path::PathBuf;

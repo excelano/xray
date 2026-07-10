@@ -1,0 +1,228 @@
+//! The findings register: the diagnostic problem list, ranked most-severe
+//! first. Reports damage; never fixes it (that's xled) and never filters it
+//! (that's xql). Every finding names what will bite a later step.
+//!
+//! Grounded in the corpus taxonomy (`~/xled-corpus/CORPUS-FINDINGS.md`). This
+//! slice implements the high-value checks the streaming scan already supports;
+//! buried headers, stacked/side-by-side tables, whitespace and smart-punct are
+//! layered in during the corpus-tuning pass.
+
+use crate::resolve::{col_letter, resolve, Class};
+use crate::scan::Scan;
+
+/// Severity group. Also selects the glyph and (later) the colour: Correctness
+/// and TypeSafety warn with `!`, Structure notes with `·`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    Correctness,
+    TypeSafety,
+    Structure,
+}
+
+impl Group {
+    pub fn label(self) -> &'static str {
+        match self {
+            Group::Correctness => "correctness",
+            Group::TypeSafety => "type safety",
+            Group::Structure => "structure",
+        }
+    }
+    pub fn glyph(self) -> char {
+        match self {
+            Group::Structure => '·',
+            _ => '!',
+        }
+    }
+}
+
+pub struct Finding {
+    pub group: Group,
+    pub subject: String,
+    pub detail: String,
+}
+
+fn col_name(header: &str, letter: &str) -> String {
+    if header.trim().is_empty() {
+        format!("column {letter}")
+    } else {
+        format!("{header} ({letter})")
+    }
+}
+
+pub fn findings(scan: &Scan) -> Vec<Finding> {
+    let mut out = Vec::new();
+    let width = scan.columns.len();
+
+    // ---- correctness ----
+    if !scan.ragged.is_empty() {
+        let (row, fields) = scan.ragged[0];
+        let more = if scan.ragged.len() > 1 {
+            format!(" (+{} more)", scan.ragged.len() - 1)
+        } else {
+            String::new()
+        };
+        out.push(Finding {
+            group: Group::Correctness,
+            subject: format!(
+                "ragged row{}",
+                if scan.ragged.len() == 1 { "" } else { "s" }
+            ),
+            detail: format!(
+                "row {row} has {fields} fields; table is {width} wide{more} — likely stray commas in an unquoted cell"
+            ),
+        });
+    }
+    for (row, sample) in &scan.total_rows {
+        out.push(Finding {
+            group: Group::Correctness,
+            subject: format!("total row {row}"),
+            detail: format!("pre-aggregated \"{sample}\"; a summary line, not data"),
+        });
+    }
+
+    // ---- per-column: type safety + structure ----
+    let mut seen_headers: Vec<String> = Vec::new();
+    for (i, col) in scan.columns.iter().enumerate() {
+        let letter = col_letter(i);
+        let name = col_name(&col.header, &letter);
+        let r = resolve(col);
+
+        match r.class {
+            Class::Empty => {
+                out.push(Finding {
+                    group: Group::Structure,
+                    subject: if col.header.trim().is_empty() {
+                        format!("spacer column {letter}")
+                    } else {
+                        format!("empty column {letter}")
+                    },
+                    detail: if col.header.trim().is_empty() {
+                        "blank header, entirely empty".into()
+                    } else {
+                        format!("\"{}\" — entirely empty", col.header)
+                    },
+                });
+                continue; // an empty column has nothing more to say
+            }
+            Class::LeadingZero => out.push(Finding {
+                group: Group::TypeSafety,
+                subject: format!("{name} is leading-zero text"),
+                detail: format!("{}; a numeric cast strips the zeros", r.detail),
+            }),
+            Class::Currency => {
+                let noise = if r.float_noise {
+                    " plus float-precision noise"
+                } else {
+                    ""
+                };
+                out.push(Finding {
+                    group: Group::TypeSafety,
+                    subject: format!("{name} is currency text, not a number"),
+                    detail: format!("$ and thousands commas{noise}; de-currency before math"),
+                });
+            }
+            _ => {}
+        }
+        if r.bool_mixed {
+            out.push(Finding {
+                group: Group::TypeSafety,
+                subject: format!("{name} mixes boolean forms"),
+                detail: format!("{} — normalize before logic", col.bool_reprs.join(" / ")),
+            });
+        }
+        if r.mixed_nonnumeric > 0 {
+            out.push(Finding {
+                group: Group::TypeSafety,
+                subject: format!("{name} mixes types"),
+                detail: format!(
+                    "{} numeric with {} non-numeric value{} — num() skips {}",
+                    r.label.trim_end_matches(" · MIXED"),
+                    r.mixed_nonnumeric,
+                    if r.mixed_nonnumeric == 1 { "" } else { "s" },
+                    if r.mixed_nonnumeric == 1 { "it" } else { "them" },
+                ),
+            });
+        }
+
+        // schema notes
+        let distinct = col.distinct_count();
+        let id_like = r.class == Class::LeadingZero
+            || matches!(
+                col.header.trim().to_ascii_lowercase().as_str(),
+                "id" | "code" | "key"
+            )
+            || col.header.to_ascii_lowercase().ends_with("id")
+            || col.header.to_ascii_lowercase().ends_with("code");
+
+        // A candidate key is not a problem — it's useful context, so it lives in
+        // the reading (see render), not this damage list. Constant and
+        // duplicate-in-an-ID-column are mild hazards and stay.
+        if distinct == 1 && col.nonblank > 1 {
+            out.push(Finding {
+                group: Group::Structure,
+                subject: format!("{name} is constant"),
+                detail: format!("one value across {} rows", col.nonblank),
+            });
+        } else if id_like && distinct < col.nonblank && distinct > 0 {
+            out.push(Finding {
+                group: Group::Structure,
+                subject: format!("{name} has duplicate values"),
+                detail: format!(
+                    "{} values, {distinct} distinct — not a unique key",
+                    col.nonblank
+                ),
+            });
+        }
+
+        let fill = if col.total == 0 {
+            100
+        } else {
+            col.nonblank * 100 / col.total
+        };
+        if fill > 0 && fill < 40 {
+            out.push(Finding {
+                group: Group::Structure,
+                subject: format!("{name} is mostly blank"),
+                detail: format!("{} of {} rows filled ({fill}%)", col.nonblank, col.total),
+            });
+        }
+
+        // duplicate / blank header names
+        let h = col.header.trim();
+        if !h.is_empty() {
+            let lower = h.to_ascii_lowercase();
+            if seen_headers.contains(&lower) {
+                out.push(Finding {
+                    group: Group::Structure,
+                    subject: format!("duplicate header \"{h}\""),
+                    detail: format!("column {letter} repeats an earlier header name"),
+                });
+            }
+            seen_headers.push(lower);
+        }
+    }
+
+    // stable order: correctness, then type safety, then structure; original
+    // discovery order preserved within each group.
+    out.sort_by_key(|f| match f.group {
+        Group::Correctness => 0,
+        Group::TypeSafety => 1,
+        Group::Structure => 2,
+    });
+    out
+}
+
+/// One-line breakdown for the verdict header, e.g. "2 correctness · 3 type safety".
+pub fn verdict(findings: &[Finding]) -> String {
+    if findings.is_empty() {
+        return "clean — nothing flagged".into();
+    }
+    let mut parts = Vec::new();
+    for g in [Group::Correctness, Group::TypeSafety, Group::Structure] {
+        let n = findings.iter().filter(|f| f.group == g).count();
+        if n > 0 {
+            parts.push(format!("{n} {}", g.label()));
+        }
+    }
+    parts.join(" · ")
+}

@@ -180,6 +180,16 @@ impl Column {
                     self.bool_reprs.push(r);
                 }
             }
+            Kind::Currency => {
+                let body: String = trimmed
+                    .trim_start_matches('$')
+                    .chars()
+                    .filter(|&c| c != ',')
+                    .collect();
+                if is_float_noise(body.trim()) {
+                    self.float_noise = true;
+                }
+            }
             _ => {}
         }
 
@@ -198,6 +208,7 @@ pub struct Scan {
     pub columns: Vec<Column>,
     pub data_rows: usize,
     pub ragged: Vec<(usize, usize)>, // (1-based file row, field count) where count != header width
+    pub total_rows: Vec<(usize, String)>, // (1-based file row, a filled value) for summary/total lines
     pub delimiter: u8,
     pub crlf: bool,
     pub bom: bool,
@@ -258,6 +269,7 @@ pub fn scan(path: &Path) -> std::io::Result<Scan> {
                 columns: Vec::new(),
                 data_rows: 0,
                 ragged: Vec::new(),
+                total_rows: Vec::new(),
                 delimiter,
                 crlf,
                 bom,
@@ -274,12 +286,38 @@ pub fn scan(path: &Path) -> std::io::Result<Scan> {
 
     let mut data_rows = 0usize;
     let mut ragged = Vec::new();
+    let mut total_rows: Vec<(usize, String)> = Vec::new();
     for (i, rec) in records.enumerate() {
         let rec = rec?;
         data_rows += 1;
+        let file_row = i + 2; // 1-based, past the header
         if rec.len() != width {
-            ragged.push((i + 2, rec.len())); // +2: 1-based, past the header
+            ragged.push((file_row, rec.len()));
         }
+
+        // Total/summary-row signature: nearly all cells blank, but at least one
+        // numeric-looking cell filled (a "Total: $…" line masquerading as data).
+        let mut blanks = width.saturating_sub(rec.len()); // short rows: missing cells are blank
+        let mut sample = String::new();
+        let mut has_number = false;
+        for field in rec.iter() {
+            let t = field.trim();
+            if t.is_empty() {
+                blanks += 1;
+            } else {
+                if sample.is_empty() {
+                    sample = t.to_string();
+                }
+                if matches!(classify(field), Kind::Int | Kind::Decimal | Kind::Currency) {
+                    has_number = true;
+                    sample = t.to_string();
+                }
+            }
+        }
+        if width >= 4 && has_number && blanks >= width.saturating_sub(2) && total_rows.len() < 64 {
+            total_rows.push((file_row, sample));
+        }
+
         for (c, field) in rec.iter().enumerate() {
             if c < columns.len() {
                 columns[c].observe(field);
@@ -295,6 +333,7 @@ pub fn scan(path: &Path) -> std::io::Result<Scan> {
         columns,
         data_rows,
         ragged,
+        total_rows,
         delimiter,
         crlf,
         bom,
