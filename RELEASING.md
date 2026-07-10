@@ -2,7 +2,7 @@
 
 The release loop for a new version. Run it from a clean `main` with the working tree committed.
 
-The crate publishes as **`x-ray`** (the bare `xray` name is a dormant 2018 crate); the command everyone installs is **`xray`**. cargo-dist artifacts are named after the crate — the installer is `x-ray-installer.sh`, the Homebrew formula is `x-ray`, the tarballs are `x-ray-<target>.tar.xz` — and each contains the `xray` binary.
+The crate publishes as **`x-ray`** (the bare `xray` name is a dormant 2018 crate); the command everyone installs is **`xray`**. cargo-dist's tarballs and installer are named after the crate — `x-ray-installer.sh`, `x-ray-<target>.tar.xz` — and each contains the `xray` binary. The Homebrew formula and the apt package are pinned to **`xray`** via `[package.metadata.dist] formula = "xray"` and `[package.metadata.deb] name = "xray"` in `Cargo.toml`, so they install as `brew install excelano/tap/xray` and `apt install xray`, matching the rest of the family. (crates.io is the lone hyphenated coordinate.)
 
 1. **Bump the version.** Edit `version` in `Cargo.toml` (e.g. `0.1.0` → `0.1.1`). Update `Cargo.lock` with a build (`cargo build`), run `cargo test`, commit.
 
@@ -26,6 +26,6 @@ The crate publishes as **`x-ray`** (the bare `xray` name is a dormant 2018 crate
 
 - **crates.io API needs a User-Agent.** Requests without one return empty. To verify a publish from a script: `curl -s -H "User-Agent: …" https://crates.io/api/v1/crates/x-ray`.
 - **First-time crates.io setup:** the `CRATES_IO_TOKEN` org secret must be present for `publish-crate.yml` to fire; a verified crates.io email is required before the first publish; the token needs `publish-new` + `publish-update` scopes.
-- **First-time Homebrew:** cargo-dist pushes the formula to `excelano/homebrew-tap`; that tap repo must exist and the release job needs a token allowed to push to it.
+- **First-time Homebrew:** cargo-dist pushes the formula to `excelano/homebrew-tap`; that tap repo must exist and the release job needs the `HOMEBREW_TAP_TOKEN` secret allowed to push to it. **Gotcha (bit v0.1.0):** if that's an *org* secret scoped to selected repos, a brand-new repo isn't on the list, so the `publish-homebrew-formula` job fails at checkout with `Input required and not supplied: token`. Add the new repo to the secret's access list before tagging. If it's already tagged, don't re-run that job on the old tag — push the formula to the tap by hand for that release; the token fix takes effect on the next one.
 - **docs.rs** rebuilds automatically on each publish — no action needed.
 - The README, the landing page (`excelano.com/xray`), and `SECURITY.md` reference the version implicitly via "latest"; none need a per-release edit.

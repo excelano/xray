@@ -72,6 +72,8 @@ The synthetic torture fixture `fixtures/messy/vendor_spend.csv` exercises a cros
 
 **Resolution (Fork B):** xray is read-only and single-pass, so it *streams* — bounded memory regardless of file size, unlike xled (whole file in RAM, ~8.7× file size, ~1 GB on the 93 MB corpus exports). This is a capability win: xray profiles the big files xled chokes on, which fits "the first move on *any* file." The one cost is that exact distinct-counts need a **cardinality cap** — exact up to a bound (K distinct), then report `K+` (or an approximate count), with the cap stated in the output. Streaming with a cardinality cap is the design; the cap value is a tuning knob for the corpus phase.
 
+> **As-built (v0.1.0):** the single-pass scan and cardinality cap shipped, but the reader currently loads the whole file into memory before the pass rather than streaming from the file handle — so the "bounded memory regardless of file size" property above is *not yet realized* (fine to ~0.5 GB; a 261 MB corpus file profiles in ~7 s). Closing this — true streaming from a small pre-read, or softening the claim — is tracked as a P2 in `BACKLOG.md`.
+
 ## Settled
 
 - **Mental model** — diagnostic imaging; three registers (film / reading / findings + verdict) always on, referral opt-in.

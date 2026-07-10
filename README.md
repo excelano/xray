@@ -58,15 +58,15 @@ curl -fsSL https://excelano.com/apt/setup.sh | sudo sh
 Then install it, so `apt upgrade` keeps it current:
 
 ```sh
-sudo apt install x-ray
+sudo apt install xray
 ```
 
-Both amd64 and arm64 packages ship with every release. The command is `xray`.
+Both amd64 and arm64 packages ship with every release.
 
 ### Homebrew
 
 ```sh
-brew install excelano/tap/x-ray
+brew install excelano/tap/xray
 ```
 
 ### crates.io
@@ -75,7 +75,7 @@ brew install excelano/tap/x-ray
 cargo install x-ray
 ```
 
-The crate is `x-ray`; the installed command is `xray`.
+crates.io is the one place the name is hyphenated: the bare `xray` crate was taken (a dormant 2018 crate), so the crate publishes as `x-ray`. Everywhere else — the command, the apt package, the Homebrew formula — is `xray`. The installed binary is always `xray`.
 
 ### Curl (any Linux or macOS)
 
@@ -95,7 +95,7 @@ xray --header 6 data.csv      # force the header to row 6 (0 = no header)
 xray --color never data.csv   # plain output (also automatic when piped)
 ```
 
-xray auto-detects a buried header, sniffs the delimiter (quote-aware), and colours the output for a terminal while emitting plain text to a pipe. Everything it needs, it reads in one streaming pass.
+xray auto-detects a buried header, sniffs the delimiter (quote-aware), and colours the output for a terminal while emitting plain text to a pipe. Everything it needs, it gathers in a single pass over the file.
 
 ## Use it from Claude Code
 
