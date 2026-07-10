@@ -156,6 +156,16 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                 subject: format!("{name} is leading-zero text"),
                 detail: format!("{}; a numeric cast strips the zeros", r.detail),
             }),
+            Class::LongId => out.push(Finding {
+                group: Group::TypeSafety,
+                kind: "long_id",
+                column: at.clone(),
+                subject: format!("{name} is a long numeric ID"),
+                detail: format!(
+                    "{}; 16+ digits exceed exact number range — keep as text",
+                    r.detail
+                ),
+            }),
             Class::Currency => {
                 let noise = if r.float_noise {
                     " plus float-precision noise"
@@ -292,7 +302,7 @@ pub fn referral(scan: &Scan) -> Vec<Referral> {
     for col in &scan.columns {
         let r = resolve(col);
         match r.class {
-            Class::LeadingZero => leading = true,
+            Class::LeadingZero | Class::LongId => leading = true,
             Class::Currency => currency = true,
             Class::Empty if col.header.trim().is_empty() => spacer = true,
             _ => {}

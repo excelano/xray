@@ -93,7 +93,8 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
         };
         // A candidate key is useful context, not a problem — surface it here in
         // the reading rather than in the findings damage list.
-        let key_eligible = matches!(read.class, Class::LeadingZero | Class::Int | Class::Text);
+        let key_eligible =
+            matches!(read.class, Class::LeadingZero | Class::LongId | Class::Int | Class::Text);
         let is_key = key_eligible
             && !col.distinct_capped
             && col.distinct_count() == col.nonblank

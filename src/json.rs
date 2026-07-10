@@ -32,7 +32,7 @@ pub fn to_json(name: &str, scan: &Scan, refer: bool) -> Value {
                 (col.nonblank * 100 + col.total / 2) / col.total
             };
             let key_eligible =
-                matches!(r.class, Class::LeadingZero | Class::Int | Class::Text);
+                matches!(r.class, Class::LeadingZero | Class::LongId | Class::Int | Class::Text);
             let candidate_key = key_eligible
                 && !col.distinct_capped
                 && col.distinct_count() == col.nonblank

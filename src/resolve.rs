@@ -23,6 +23,7 @@ pub fn col_letter(mut idx: usize) -> String {
 pub enum Class {
     Empty,
     LeadingZero,
+    LongId,
     Currency,
     Bool,
     Int,
@@ -37,6 +38,7 @@ impl Class {
         match self {
             Class::Empty => "empty",
             Class::LeadingZero => "leading_zero",
+            Class::LongId => "long_id",
             Class::Currency => "currency",
             Class::Bool => "bool",
             Class::Int => "int",
@@ -116,6 +118,7 @@ pub fn resolve(col: &Column) -> Resolved {
     }
 
     let leading = count(col, Kind::LeadingZero);
+    let longid = count(col, Kind::LongId);
     let ints = count(col, Kind::Int);
     let decimals = count(col, Kind::Decimal);
     let currency = count(col, Kind::Currency);
@@ -135,6 +138,16 @@ pub fn resolve(col: &Column) -> Resolved {
             class: Class::LeadingZero,
             label: "text · leading-0".into(),
             detail: examples,
+            flag: Some("keep as text".into()),
+            ..base
+        };
+    }
+    // Overlong all-digit IDs: keep as text, same reflex as leading zeros.
+    if longid > 0 && longid + ints + leading >= text {
+        return Resolved {
+            class: Class::LongId,
+            label: "text · long-id".into(),
+            detail: col.examples.join(", "),
             flag: Some("keep as text".into()),
             ..base
         };

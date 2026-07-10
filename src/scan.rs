@@ -19,6 +19,7 @@ pub const CARDINALITY_CAP: usize = 10_000;
 pub enum Kind {
     Int,
     LeadingZero,
+    LongId,
     Decimal,
     Currency,
     Bool,
@@ -48,6 +49,11 @@ pub fn classify(raw: &str) -> Kind {
         // All digits. A leading zero on a multi-digit run is an ID, not a number.
         if body.len() > 1 && body.starts_with('0') {
             return Kind::LeadingZero;
+        }
+        // More digits than f64/i64 can hold exactly (~15–19) — an identifier, not
+        // a quantity. Keep as text so stats don't round it and nobody casts it.
+        if body.len() > 15 {
+            return Kind::LongId;
         }
         return Kind::Int;
     }
