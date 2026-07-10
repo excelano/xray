@@ -39,26 +39,56 @@ xray plus the xql the family already owns credibly retires three specialists and
 - **datamash** → its *ungrouped* stats. (The *grouped* case — stats per category — is already xql's `GROUP BY`; xray does not chase it.)
 - **qsv `sample` / `slice` / `search` / `head`** → the peek-at-rows preview, folded into profiling as a sample of real rows.
 
-## The profile — what every run reports
+## The mental model — diagnostic imaging
 
-The fixed battery (to be finalised this session; this is the starting slate):
+xray images a table and hands back a reading in three registers, always on, plus an opt-in referral. It never operates. The metaphor is the name's: you *x-ray* the file, you get a diagnostic readout.
 
-*File level* — row count, column count, detected delimiter, encoding, line-ending style, presence/absence of a header row, and ragged-row detection (rows whose field count differs from the header).
+**The film** — what the file objectively *is*. Dimensions (rows × cols), detected delimiter, quote char, encoding, line-ending style, BOM, header row present/absent, file size. The plain picture before interpretation.
 
-*Per column* — position (letter + name), inferred type (string / integer / decimal / boolean / date, with the same stringly-typed caution as xled: `02134` is text, not the number 2134), count and rate of blank/null cells, distinct-value count (cardinality), and a small top-frequency table. For numeric columns, min / max / mean / and a spread stat. For string columns, min/max length and a couple of example values.
+**The reading** — the per-column table, the substance. One row per column: letter (`A`/`B`/`AF`) + name, inferred type, fill (non-blank count / rate), cardinality, and type-appropriate stats — numeric gets min/max/mean/spread, text gets min/max length and real examples. Inline `!` flags mark cells of concern (leading-zero, currency, mixed-type).
 
-*A sample* — the first few real data rows, rendered readably, so the profile includes what the data actually looks like and not only its statistics.
+**The findings** — the diagnostic problem list, the reason xray exists rather than aliasing csvstat. Not more statistics — the *damage* that will bite a later step: ragged rows, mixed-type columns, leading-zero/ID columns, high-blank columns, total/subtotal rows, spacer columns, duplicate/blank headers, buried headers, candidate keys. Grouped and ranked most-severe-first (correctness → type safety → structure), under a headline verdict (*"7 findings: …"*). Severity is a two-level glyph: `!` (will bite you) and `·` (worth knowing), reinforced by colour (see the colour design), never carried by colour alone.
 
-## Open — to settle this session
+**The referral** *(opt-in, `--refer`)* — names the family tool that treats each finding: leading zeros / ragged rows → xled; filter or aggregate → xql; pivot → xshape. **Off by default.** The primary user is Claude, who already knows the family; a default referral would be preaching (lux principle: never wire self-evident guidance). It earns its keep for a human learning the stack, so it waits to be asked.
 
-These are the decisions xray is being carried forward to make:
+### The findings catalogue
 
-1. **Default output format.** The tension: a human skimming a terminal wants an aligned, sectioned, readable report; an LLM consuming the profile wants something structured and stable. Options: a pretty aligned report by default with `--json` for machine use; JSON-first with a `--pretty` human view; or a single format that serves both. Given the primary user is Claude, lean toward a format that is *both* readable and reliably parseable — but decide deliberately.
-2. **Flag surface.** Candidates: `--json`, a column selector to profile a subset, `--sample N` for row-count control, `--top N` for the frequency table depth, `--no-sample`, a full-scan vs. sampled-scan toggle for very large files. Keep it small — the fixed-profile discipline means most "flags" are really xql queries in disguise and should be refused.
-3. **Sampling on large files.** Exact stats require a full scan; a huge file may warrant a sampled profile with the sampling stated in the output. Decide the default (full scan until proven too slow) and how honestly to label a sampled result.
-4. **Type inference rules.** Reuse xled's cast philosophy exactly — a value is a string until it unambiguously is not, leading zeros and long IDs stay text. Share the inference code with xled if practical.
-5. **Bare-command / zero-config behaviour.** `xray file.csv` with no flags gives the full default profile. Confirm that matches the family's "bare command reports state" reflex.
+Grounded row-for-row in `~/xled-corpus/CORPUS-FINDINGS.md` (143 real client spreadsheets), in three registers:
+
+- **Structural** — buried header (via the modal-width-jump heuristic), preamble rows, leading/trailing blank rows, spacer column, trailing empty cols, total/subtotal rows, stacked tables, side-by-side tables, ragged rows, blank/duplicate headers.
+- **Value** — leading-zero/long-ID (→ keep text), currency formatting, float-precision noise (`449.29999999999995`), mixed-type column, whitespace pad, smart-punct / HTML-entity / escaping, multi-value newline cell.
+- **Schema** — candidate key (100% unique), constant column, high-blank/sparse, sentinel values (`TBN`, `n/a`, `ignore`), categorical → top-N, aggregate-as-source.
+
+The synthetic torture fixture `fixtures/messy/vendor_spend.csv` exercises a cross-section; the real corpus is for *tuning* thresholds later (the modal-width heuristic, "how mixed is mixed", cardinality cap), same as xled's validation run.
+
+## Relationship to the family — one detection core
+
+**xled and xql both already ship a `describe`.** They pre-date xray and each gropes toward a slice of what xray now owns:
+
+- **xled's `describe`** is advisory *structural* region detection (preamble, blank rows, total rows) — and its corpus notes flag that it *misses the buried-header case*. That is xray's structural-findings layer in embryo; it only lived in xled because xray didn't exist. **Resolution (Fork A):** build the structural + stringly-typed detection properly in xray, and treat xled's `describe` as a future **library consumer** of a shared detection crate — the family agrees on structure and types by construction, one implementation.
+- **xql's `describe`** answers a *different* question — an SQL-castable column/type schema — under a *different* type philosophy: xql wants to coerce values so it can query them, whereas xray and xled deliberately preserve strings (a leading zero is text, not a number). That philosophical split is exactly why xql stays on the far side of the library boundary: sharing xray's stringly-typed inference would mean the wrong thing for a query engine. So the shared core is **structural detection + preserve-the-string inference** (xled + xray); xql keeps its own coerce-to-query describe. Lower crossover, and principled, not incidental.
+
+## Architecture — stream, don't buffer
+
+**Resolution (Fork B):** xray is read-only and single-pass, so it *streams* — bounded memory regardless of file size, unlike xled (whole file in RAM, ~8.7× file size, ~1 GB on the 93 MB corpus exports). This is a capability win: xray profiles the big files xled chokes on, which fits "the first move on *any* file." The one cost is that exact distinct-counts need a **cardinality cap** — exact up to a bound (K distinct), then report `K+` (or an approximate count), with the cap stated in the output. Streaming with a cardinality cap is the design; the cap value is a tuning knob for the corpus phase.
+
+## Settled
+
+- **Mental model** — diagnostic imaging; three registers (film / reading / findings + verdict) always on, referral opt-in.
+- **Referral** — off by default, `--refer` to show; only ever suggests family tools.
+- **Colour** — reinforces severity, never carries it alone; colourblind-safe axis (blue ↔ amber ↔ gray + brightness), `!`/`·` glyphs redundant; auto-off on non-TTY, `NO_COLOR` and `--color=never|always|auto` honoured; via `anstyle` + `anstream`. Palette approved 2026-07-10 (Critical `#c62828`/`#f98a8a`, Warning `#9a5b06`/`#fbc23c`, Note `#5c6b78`/`#93a4b3`, Accent `#0b6f86`/`#38d6ef`).
+- **Type inference** — xled's cast philosophy exactly (string until unambiguously not; leading zeros / long IDs stay text), shared via the detection core above.
+- **Architecture** — streaming single-pass with a cardinality cap.
+- **xled `describe`** — future consumer of the shared detection crate; **xql `describe`** stays separate (coerce-to-query type philosophy).
+
+## Open — still to settle
+
+1. **`--json` shape.** The human render is settled (three registers, aligned). The machine format needs its own stable schema — likely the same three registers as JSON so the two views are one model, two renderings. Design the schema against the fixture.
+2. **Flag surface (final).** Confirmed small: `--refer`, `--json`, `--color`, `--top N` (frequency depth), `--sample N` (rows shown). Resist anything that's an xql query in disguise (`--where`, `--select`). A subset column selector is the one borderline case — decide.
+3. **Cardinality cap value.** The K where exact distinct-counts become `K+`. A corpus-tuning knob; pick a default (candidate: 10k) and how to label a capped count.
+4. **Buried-header heuristic.** The modal-width-jump rule (first row whose fill count jumps to the table's modal width is the suspected header). Threshold and false-positive behaviour tuned against the real corpus.
+5. **Bare-command / zero-config.** `xray file.csv` gives the full default profile — matches the family's "bare command reports state" reflex. Confirm no required flags.
 
 ## First move next session
 
-Settle open question 1 (default output format) — it shapes everything downstream, and the primary-user-is-Claude framing points hard at a format that reads cleanly *and* parses reliably. Then lock the fixed profile battery (the "what every run reports" slate) against a real file from `~/xled-corpus`.
+The design is settled enough to build. Next is implementation of the streaming scan + the human render (film / reading / findings) against `fixtures/messy/vendor_spend.csv`, then the `--json` schema (open 1). Corpus-tuning (open 3, 4) comes after the render is real and there's something to tune.

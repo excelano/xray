@@ -1,0 +1,11 @@
+,Code,Vendor,Category,FY25 Spend ($),Renewals,Active,Notes
+,0012,"Acme, Inc.",SaaS,"$1,200.00",3,Y,
+,0007,Initech,Infra,$449.29999999999995,1,Y,pending
+,00341,Globex,SaaS,"$12,000.00",12,N,
+,0055,"Soylent ""Green""",Infra,$820.50,n/a,Y,
+,0012,Acme Inc,SaaS,$1200,3,yes,dup code?
+,0208,Umbrella,Security,$5400.00,2,N,
+,00341,Globex,SaaS,$0,0,N,duplicate vendor
+,0099,Hooli,SaaS,"$3,300.00",4,true,
+,,,,"$24,370.50",,,
+,0404,Wonka,Ops,$100,1,Y,extra,field,here
