@@ -212,6 +212,56 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
     out
 }
 
+/// The opt-in referral (`--refer`): map the findings present to the family tool
+/// that treats them. Off by default — the primary user already knows the family;
+/// this waits to be asked. Empty when there is nothing to hand off.
+pub fn referral(scan: &Scan) -> Vec<String> {
+    let has_rows = !scan.ragged.is_empty() || !scan.total_rows.is_empty();
+    let mut spacer = false;
+    let mut leading = false;
+    let mut currency = false;
+    let mut mixed = false;
+    for col in &scan.columns {
+        let r = resolve(col);
+        match r.class {
+            Class::LeadingZero => leading = true,
+            Class::Currency => currency = true,
+            Class::Empty if col.header.trim().is_empty() => spacer = true,
+            _ => {}
+        }
+        if r.mixed_nonnumeric > 0 || r.bool_mixed {
+            mixed = true;
+        }
+    }
+
+    let mut lines = Vec::new();
+    let mut push = |trigger: &str, tool: &str, action: &str| {
+        lines.push(format!("{:<32}→ {:<6} {}", trigger, tool, action));
+    };
+    if has_rows || spacer {
+        push(
+            "ragged / total / spacer rows",
+            "xled",
+            "crop to the real table, drop the summary line",
+        );
+    }
+    if leading || currency {
+        push(
+            "leading-zero / currency text",
+            "xled",
+            "keep IDs as text; round(num(),2) only at math time",
+        );
+    }
+    if currency || mixed {
+        push(
+            "numbers trapped as text",
+            "xql",
+            "filter or aggregate once those columns are clean",
+        );
+    }
+    lines
+}
+
 /// One-line breakdown for the verdict header, e.g. "2 correctness · 3 type safety".
 pub fn verdict(findings: &[Finding]) -> String {
     if findings.is_empty() {

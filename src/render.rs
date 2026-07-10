@@ -25,7 +25,7 @@ fn delim_name(d: u8) -> String {
     }
 }
 
-pub fn render(name: &str, scan: &Scan) -> String {
+pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
     let mut out = String::new();
     out.push_str(&format!("xray · {name}\n\n"));
 
@@ -125,6 +125,17 @@ pub fn render(name: &str, scan: &Scan) -> String {
             f.subject,
             f.detail,
         ));
+    }
+
+    // ---- REFERRAL (opt-in) ----
+    if refer {
+        let refs = findings::referral(scan);
+        if !refs.is_empty() {
+            out.push_str("\nREFERRAL\n");
+            for line in refs {
+                out.push_str(&format!("  {line}\n"));
+            }
+        }
     }
 
     out

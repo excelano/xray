@@ -20,6 +20,10 @@ use clap::Parser;
 struct Cli {
     /// The CSV/DSV file to profile.
     file: PathBuf,
+
+    /// Also suggest which family tool treats each finding (off by default).
+    #[arg(long)]
+    refer: bool,
 }
 
 fn main() -> ExitCode {
@@ -31,7 +35,7 @@ fn main() -> ExitCode {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| cli.file.display().to_string());
-            print!("{}", render::render(&name, &s));
+            print!("{}", render::render(&name, &s, cli.refer));
             ExitCode::SUCCESS
         }
         Err(e) => {
