@@ -215,8 +215,8 @@ pub struct Scan {
     pub data_rows: usize,
     pub ragged: Vec<(usize, usize)>, // (1-based file row, field count) where count != header width
     pub total_rows: Vec<(usize, String)>, // (1-based file row, a filled value) for summary/total lines
-    pub header_row: usize, // 1-based file row of the header; 0 = no header
-    pub preamble: usize,   // junk rows above a buried header (0 for a clean row-1 header)
+    pub header_row: usize,                // 1-based file row of the header; 0 = no header
+    pub preamble: usize, // junk rows above a buried header (0 for a clean row-1 header)
     pub delimiter: u8,
     pub crlf: bool,
     pub bom: bool,
@@ -279,8 +279,14 @@ fn modal_shape(sample: &[csv::StringRecord]) -> (usize, usize) {
         }
     }
     // (n, w) key: deterministic across runs, and ties break toward the wider shape.
-    let modal_fill = fill_freq.iter().max_by_key(|(&w, &n)| (n, w)).map(|(&w, _)| w);
-    let modal_width = width_freq.iter().max_by_key(|(&w, &n)| (n, w)).map(|(&w, _)| w);
+    let modal_fill = fill_freq
+        .iter()
+        .max_by_key(|(&w, &n)| (n, w))
+        .map(|(&w, _)| w);
+    let modal_width = width_freq
+        .iter()
+        .max_by_key(|(&w, &n)| (n, w))
+        .map(|(&w, _)| w);
     (modal_fill.unwrap_or(0), modal_width.unwrap_or(0))
 }
 
@@ -296,7 +302,11 @@ fn detect_header(sample: &[csv::StringRecord]) -> usize {
     // The header is the first row reaching (within one of) the modal width; the
     // -1 tolerance keeps a header with one unnamed trailing column from being
     // demoted to preamble.
-    let threshold = if modal_fill <= 4 { modal_fill } else { modal_fill - 1 };
+    let threshold = if modal_fill <= 4 {
+        modal_fill
+    } else {
+        modal_fill - 1
+    };
     let candidate = sample
         .iter()
         .position(|r| filled(r) >= threshold)
@@ -342,7 +352,7 @@ fn process_row(
     // "Total: $…" line masquerading as data. Requiring the first cell blank is
     // what separates a real total row from an ordinary sparse record whose key
     // is filled (Alice,,,42.50).
-    let first_blank = rec.get(0).map_or(true, |c| c.trim().is_empty());
+    let first_blank = rec.get(0).is_none_or(|c| c.trim().is_empty());
     let mut blanks = width.saturating_sub(rec.len());
     let mut sample = String::new();
     let mut has_number = false;
@@ -439,10 +449,13 @@ pub fn scan(path: &Path, header_choice: HeaderChoice) -> std::io::Result<Scan> {
     let (header_present, header_idx) = match header_choice {
         Some(0) => (false, 0),
         Some(n) => {
-            if n - 1 >= buf.len() {
+            if n > buf.len() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!("--header {n} is past the last row (only {} rows in view)", buf.len()),
+                    format!(
+                        "--header {n} is past the last row (only {} rows in view)",
+                        buf.len()
+                    ),
                 ));
             }
             (true, n - 1)
@@ -469,9 +482,9 @@ pub fn scan(path: &Path, header_choice: HeaderChoice) -> std::io::Result<Scan> {
 
     // Buffered data rows (everything after the header within the window).
     let data_start = if header_present { header_idx + 1 } else { 0 };
-    for pos in data_start..buf.len() {
+    for (pos, rec) in buf.iter().enumerate().skip(data_start) {
         process_row(
-            &buf[pos],
+            rec,
             width,
             pos + 1,
             &mut columns,

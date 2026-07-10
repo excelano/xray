@@ -69,7 +69,12 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
         .max()
         .unwrap_or(6)
         .max(6);
-    let ty_w = reads.iter().map(|r| r.label.len()).max().unwrap_or(4).max(4);
+    let ty_w = reads
+        .iter()
+        .map(|r| r.label.len())
+        .max()
+        .unwrap_or(4)
+        .max(4);
 
     out.push_str(&format!(
         "  col  {:<name_w$}  {:<ty_w$}  fill  distinct  detail\n",
@@ -81,11 +86,7 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
         } else {
             col.header.clone()
         };
-        let fill = if col.total == 0 {
-            0
-        } else {
-            (col.nonblank * 100 + col.total / 2) / col.total
-        };
+        let fill = crate::resolve::fill_pct(col.nonblank, col.total);
         let distinct = if col.distinct_capped {
             format!("{}+", col.distinct_count())
         } else {
@@ -93,8 +94,10 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
         };
         // A candidate key is useful context, not a problem — surface it here in
         // the reading rather than in the findings damage list.
-        let key_eligible =
-            matches!(read.class, Class::LeadingZero | Class::LongId | Class::Int | Class::Text);
+        let key_eligible = matches!(
+            read.class,
+            Class::LeadingZero | Class::LongId | Class::Int | Class::Text
+        );
         let is_key = key_eligible
             && !col.distinct_capped
             && col.distinct_count() == col.nonblank
@@ -109,7 +112,11 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
         // colour), never inside the width-aligned fields — so alignment holds
         // whether anstream keeps the codes or strips them.
         let detail = match &read.flag {
-            Some(f) => format!("{:<24}  {}", base_detail, paint(theme::WARN, &format!("! {f}"))),
+            Some(f) => format!(
+                "{:<24}  {}",
+                base_detail,
+                paint(theme::WARN, &format!("! {f}"))
+            ),
             None => base_detail,
         };
         let letter = col_letter(i);
@@ -165,7 +172,10 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
             out.push_str(&paint(theme::HEADER, "REFERRAL"));
             out.push('\n');
             for r in refs {
-                out.push_str(&format!("  {:<32}→ {:<6} {}\n", r.trigger, r.tool, r.action));
+                out.push_str(&format!(
+                    "  {:<32}→ {:<6} {}\n",
+                    r.trigger, r.tool, r.action
+                ));
             }
         }
     }

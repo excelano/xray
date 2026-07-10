@@ -202,7 +202,11 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                     r.label.trim_end_matches(" · MIXED"),
                     r.mixed_nonnumeric,
                     if r.mixed_nonnumeric == 1 { "" } else { "s" },
-                    if r.mixed_nonnumeric == 1 { "it" } else { "them" },
+                    if r.mixed_nonnumeric == 1 {
+                        "it"
+                    } else {
+                        "them"
+                    },
                 ),
             });
         }
@@ -241,11 +245,7 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
             });
         }
 
-        let fill = if col.total == 0 {
-            100
-        } else {
-            col.nonblank * 100 / col.total
-        };
+        let fill = crate::resolve::fill_pct(col.nonblank, col.total);
         if fill > 0 && fill < 40 {
             out.push(Finding {
                 group: Group::Structure,

@@ -25,6 +25,27 @@ anstyle = "1.0.14"
 anstream = "1.0.0"
 serde_json = "1.0.150"
 
+[dev-dependencies]
+serde_json = "1"
+
+[package.metadata.deb]
+maintainer = "David M. Anderson <david.anderson@excelano.com>"
+extended-description = """
+xray is a read-only profiler for tabular data: one streaming pass over a CSV or
+DSV that reports what the file is (shape, delimiter, encoding), what each column
+holds (type, fill, cardinality — stringly-typed, so leading zeros and long IDs
+stay text), and what will bite a later step (ragged rows, total rows, currency
+text, mixed types, buried headers). It observes and never writes — cleaning is
+xled's job, querying is xql's."""
+section = "utils"
+priority = "optional"
+depends = "libc6, libgcc-s1"
+assets = [
+    ["target/release/xray", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/x-ray/README.md", "644"],
+    ["LICENSE", "usr/share/doc/x-ray/copyright", "644"],
+]
+
 [profile.dist]
 inherits = "release"
 lto = "thin"

@@ -65,6 +65,11 @@ fn count(col: &Column, k: Kind) -> usize {
     col.kinds.get(&k).copied().unwrap_or(0)
 }
 
+/// Fill percentage (non-blank / total), rounded; 0 when the column has no rows.
+pub fn fill_pct(nonblank: usize, total: usize) -> usize {
+    (nonblank * 100 + total / 2).checked_div(total).unwrap_or(0)
+}
+
 /// Which boolean spelling-family a value belongs to. A column that stays inside
 /// one family (all Y/N, or all true/false) is consistent; two families is the
 /// "mixed forms" hazard.

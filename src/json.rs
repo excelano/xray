@@ -26,13 +26,11 @@ pub fn to_json(name: &str, scan: &Scan, refer: bool) -> Value {
         .enumerate()
         .map(|(i, col)| {
             let r = resolve(col);
-            let fill_pct = if col.total == 0 {
-                0
-            } else {
-                (col.nonblank * 100 + col.total / 2) / col.total
-            };
-            let key_eligible =
-                matches!(r.class, Class::LeadingZero | Class::LongId | Class::Int | Class::Text);
+            let fill_pct = crate::resolve::fill_pct(col.nonblank, col.total);
+            let key_eligible = matches!(
+                r.class,
+                Class::LeadingZero | Class::LongId | Class::Int | Class::Text
+            );
             let candidate_key = key_eligible
                 && !col.distinct_capped
                 && col.distinct_count() == col.nonblank
