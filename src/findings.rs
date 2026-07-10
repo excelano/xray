@@ -45,6 +45,25 @@ pub struct Finding {
     pub detail: String,
 }
 
+/// Whether a header names an identifier column — at a word boundary, so "Paid"
+/// and "decode" don't match the way a bare `ends_with("id")` would. Matches
+/// "id"/"code"/"key"/"no"/"number" as the whole name, after a separator, or as a
+/// camelCase/UPPER suffix ("userId", "OrderID").
+fn is_id_header(header: &str) -> bool {
+    let h = header.trim();
+    let hl = h.to_ascii_lowercase();
+    const WORDS: [&str; 5] = ["id", "code", "key", "number", "no"];
+    WORDS.iter().any(|w| {
+        hl == *w
+            || hl.ends_with(&format!("_{w}"))
+            || hl.ends_with(&format!(" {w}"))
+            || hl.ends_with(&format!("-{w}"))
+    }) || h.ends_with("ID")
+        || h.ends_with("Id")
+        || h.ends_with("Code")
+        || h.ends_with("No")
+}
+
 fn col_name(header: &str, letter: &str) -> String {
     if header.trim().is_empty() {
         format!("column {letter}")
@@ -180,13 +199,7 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
 
         // schema notes
         let distinct = col.distinct_count();
-        let id_like = r.class == Class::LeadingZero
-            || matches!(
-                col.header.trim().to_ascii_lowercase().as_str(),
-                "id" | "code" | "key"
-            )
-            || col.header.to_ascii_lowercase().ends_with("id")
-            || col.header.to_ascii_lowercase().ends_with("code");
+        let id_like = r.class == Class::LeadingZero || is_id_header(&col.header);
 
         // A candidate key is not a problem — it's useful context, so it lives in
         // the reading (see render), not this damage list. Constant and

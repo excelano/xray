@@ -76,7 +76,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            eprintln!("xray: cannot read {}: {e}", cli.file.display());
+            eprintln!("xray: {}: {e}", cli.file.display());
             ExitCode::FAILURE
         }
     }

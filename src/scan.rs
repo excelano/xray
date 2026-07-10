@@ -237,7 +237,9 @@ fn sniff_delimiter(sample: &[u8]) -> u8 {
                 *counts.entry(fields).or_insert(0) += 1;
             }
         }
-        if let Some((&modal, &agree)) = counts.iter().max_by_key(|(_, &n)| n) {
+        // Deterministic tie-break: on equal agreement, prefer the larger modal
+        // field count, and the (fields, n) key makes iteration order irrelevant.
+        if let Some((&modal, &agree)) = counts.iter().max_by_key(|(&fields, &n)| (n, fields)) {
             if agree > best.2 || (agree == best.2 && modal > best.1) {
                 best = (d, modal, agree);
             }
@@ -265,8 +267,9 @@ fn modal_shape(sample: &[csv::StringRecord]) -> (usize, usize) {
             *width_freq.entry(rec.len()).or_insert(0) += 1;
         }
     }
-    let modal_fill = fill_freq.iter().max_by_key(|(_, &n)| n).map(|(&w, _)| w);
-    let modal_width = width_freq.iter().max_by_key(|(_, &n)| n).map(|(&w, _)| w);
+    // (n, w) key: deterministic across runs, and ties break toward the wider shape.
+    let modal_fill = fill_freq.iter().max_by_key(|(&w, &n)| (n, w)).map(|(&w, _)| w);
+    let modal_width = width_freq.iter().max_by_key(|(&w, &n)| (n, w)).map(|(&w, _)| w);
     (modal_fill.unwrap_or(0), modal_width.unwrap_or(0))
 }
 
@@ -279,12 +282,28 @@ fn detect_header(sample: &[csv::StringRecord]) -> usize {
     if modal_fill < 2 {
         return 0;
     }
-    for (i, rec) in sample.iter().enumerate() {
-        if filled(rec) >= modal_fill {
-            return i;
-        }
+    // The header is the first row reaching (within one of) the modal width; the
+    // -1 tolerance keeps a header with one unnamed trailing column from being
+    // demoted to preamble.
+    let threshold = if modal_fill <= 4 { modal_fill } else { modal_fill - 1 };
+    let candidate = sample
+        .iter()
+        .position(|r| filled(r) >= threshold)
+        .unwrap_or(0);
+    if candidate == 0 {
+        return 0;
     }
-    0
+    // Only call it *buried* if every row above the candidate is clearly sparse
+    // preamble (title/blank), not a near-full row. This rejects the false
+    // positive where a real row-1 header has a couple of blank trailing cells
+    // and full data rows below: that header is not sparse, so we keep row 1.
+    let sparse_cap = if modal_fill <= 4 { 1 } else { modal_fill / 2 };
+    let preamble_is_sparse = sample[..candidate].iter().all(|r| filled(r) <= sparse_cap);
+    if preamble_is_sparse {
+        candidate
+    } else {
+        0
+    }
 }
 
 /// Observe one data row: fold its cells into the column accumulators and flag
@@ -303,8 +322,12 @@ fn process_row(
         ragged.push((file_row, rec.len()));
     }
 
-    // Total/summary-row signature: nearly all cells blank, but at least one
-    // numeric-looking cell filled (a "Total: $…" line masquerading as data).
+    // Total/summary-row signature: the label (first) column is blank and nearly
+    // all other cells are blank, but at least one numeric cell is filled — a
+    // "Total: $…" line masquerading as data. Requiring the first cell blank is
+    // what separates a real total row from an ordinary sparse record whose key
+    // is filled (Alice,,,42.50).
+    let first_blank = rec.get(0).map_or(true, |c| c.trim().is_empty());
     let mut blanks = width.saturating_sub(rec.len());
     let mut sample = String::new();
     let mut has_number = false;
@@ -322,7 +345,12 @@ fn process_row(
             }
         }
     }
-    if width >= 4 && has_number && blanks >= width.saturating_sub(2) && total_rows.len() < 64 {
+    if width >= 4
+        && first_blank
+        && has_number
+        && blanks >= width.saturating_sub(2)
+        && total_rows.len() < 64
+    {
         total_rows.push((file_row, sample));
     }
 
@@ -391,7 +419,15 @@ pub fn scan(path: &Path, header_choice: HeaderChoice) -> std::io::Result<Scan> {
     // Resolve the header position from the choice.
     let (header_present, header_idx) = match header_choice {
         Some(0) => (false, 0),
-        Some(n) => (true, (n - 1).min(buf.len() - 1)),
+        Some(n) => {
+            if n - 1 >= buf.len() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("--header {n} is past the last row (only {} rows in view)", buf.len()),
+                ));
+            }
+            (true, n - 1)
+        }
         None => (true, detect_header(&buf)),
     };
 
