@@ -31,6 +31,22 @@ pub enum Class {
     Text,
 }
 
+impl Class {
+    /// Stable machine name for the --json view.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Class::Empty => "empty",
+            Class::LeadingZero => "leading_zero",
+            Class::Currency => "currency",
+            Class::Bool => "bool",
+            Class::Int => "int",
+            Class::Decimal => "decimal",
+            Class::Categorical => "categorical",
+            Class::Text => "text",
+        }
+    }
+}
+
 /// A column's resolved read: its type class and label, a one-line detail, and
 /// the diagnostic facts the findings register needs.
 pub struct Resolved {

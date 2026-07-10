@@ -5,6 +5,7 @@
 //! the film and reading registers; findings, --refer, colour, and --json follow.
 
 mod findings;
+mod json;
 mod render;
 mod resolve;
 mod scan;
@@ -37,6 +38,10 @@ struct Cli {
     #[arg(long)]
     refer: bool,
 
+    /// Emit the profile as JSON instead of the human render.
+    #[arg(long)]
+    json: bool,
+
     /// When to colourise: auto (default), always, or never.
     #[arg(long, value_name = "WHEN", default_value = "auto")]
     color: ColorWhen,
@@ -51,6 +56,11 @@ fn main() -> ExitCode {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| cli.file.display().to_string());
+            if cli.json {
+                let value = json::to_json(&name, &s, cli.refer);
+                println!("{}", serde_json::to_string_pretty(&value).unwrap());
+                return ExitCode::SUCCESS;
+            }
             let choice = match cli.color {
                 ColorWhen::Auto => ColorChoice::Auto,
                 ColorWhen::Always => ColorChoice::Always,

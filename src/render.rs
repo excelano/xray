@@ -150,9 +150,11 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
     if refer {
         let refs = findings::referral(scan);
         if !refs.is_empty() {
-            out.push_str("\nREFERRAL\n");
-            for line in refs {
-                out.push_str(&format!("  {line}\n"));
+            out.push('\n');
+            out.push_str(&paint(theme::HEADER, "REFERRAL"));
+            out.push('\n');
+            for r in refs {
+                out.push_str(&format!("  {:<32}→ {:<6} {}\n", r.trigger, r.tool, r.action));
             }
         }
     }
