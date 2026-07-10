@@ -1,10 +1,9 @@
 # xray — backlog
 
-> **Release status (2026-07-10):** v0.1 core done, corpus-hardened, all release
-> plumbing committed (cargo-dist, install/deb/crates workflows, README,
-> SECURITY, 8 tests, clippy+fmt clean). **Next = Phase 2 release** per
-> `RELEASING.md`: create `excelano/xray` → push → tag `v0.1.0` (irreversible
-> crates.io publish) → deb → apt/homebrew. Then the items below.
+> **Release status (2026-07-10):** v0.1.0 **SHIPPED** to all channels — crates.io
+> (`x-ray`), Homebrew (`excelano/tap/xray`), apt (`xray`, amd64 + arm64), GitHub
+> release, and a Claude Code skill under `skills/xray/`. Everything below is
+> post-v0.1.0 backlog.
 
 
 Open work after the v0.1 core (scan → film/reading/findings, `--refer`, colour,
