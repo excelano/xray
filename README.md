@@ -37,13 +37,14 @@ It is stringly-typed on purpose. `02134` is text, not the number 2134; an 18-dig
 
 ## The family
 
-xray is the read-only member of a three-tool family for messy tabular data:
+xray is the read-only member of the tabular family, four small tools for messy tabular data split by *what changes*:
 
 - **xray** observes — a fixed whole-file profile, and never writes.
 - **[xled](https://github.com/excelano/xled)** edits cell *values* in place (sed and awk for tables).
-- **[xql](https://github.com/excelano/xql)** queries the row *set* — filter, aggregate, group.
+- **[xshape](https://github.com/excelano/xshape)** changes the *shape* of the grid, and never touches the values.
+- **[xql](https://github.com/excelano/xql)** queries the row *set* — filter, aggregate, group, join.
 
-Two of them act on the data; xray only looks. Its findings hand you off to the other two: leading zeros and total rows go to xled for a crop, currency-cleaned columns go to xql for the query.
+The other three act on the data; xray only looks. Its findings hand you off to them: leading zeros and total rows go to xled for a crop, a column trapped as one delimited cell goes to xshape, currency-cleaned columns go to xql for the query.
 
 ## Install
 

@@ -43,8 +43,10 @@ xray is a read-only profiler for tabular data: one streaming pass over a CSV or
 DSV that reports what the file is (shape, delimiter, encoding), what each column
 holds (type, fill, cardinality — stringly-typed, so leading zeros and long IDs
 stay text), and what will bite a later step (ragged rows, total rows, currency
-text, mixed types, buried headers). It observes and never writes — cleaning is
-xled's job, querying is xql's."""
+text, mixed types, buried headers). It observes and never writes.
+Part of the Excelano tabular family — four small tools split by what changes:
+xray observes and changes nothing, xled edits cell values, xshape changes the
+grid's shape, xql queries the row set."""
 section = "utils"
 priority = "optional"
 depends = "libc6, libgcc-s1"
