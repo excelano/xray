@@ -49,6 +49,7 @@ reach for, and why. When you already know the file, skip it.
 
 ```sh
 xray file.csv                 # profile the file: film, reading, findings
+… | xray                      # profile piped data (`xray -` spells it explicitly)
 xray --refer file.csv         # …also name which family tool treats each finding
 xray --json file.csv          # the same profile as structured JSON (for a program)
 xray --header 3 file.csv      # force row 3 as the header (0 = no header)
@@ -57,9 +58,10 @@ xray -d '|' file.csv          # force the delimiter when the sniff misreads it
 xray --color never file.csv   # plain output (auto-off when piped anyway)
 ```
 
-xray reads a **file argument** (not stdin yet). Human output goes to stdout; it is safe
-to redirect or pipe. There is **no in-place flag and no write path** — by design, there
-is nothing for xray to write.
+xray reads a **file argument or stdin** — omit the file, or give `-`, to profile piped
+data (reported as `(stdin)`). Human output goes to stdout; it is safe to redirect or
+pipe. There is **no in-place flag and no write path** — by design, there is nothing for
+xray to write.
 
 Flags: `--refer` (add the opt-in referral block, off by default), `--json` (machine
 output), `--header <ROW>` (1-based; `0` = treat row 1 as data; omit to auto-detect a

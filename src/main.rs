@@ -1,8 +1,8 @@
 //! xray — a read-only profiler for tabular data.
 //!
-//! Films a delimited file and reports what it is (see DESIGN.md). xray never
-//! writes: it observes, so xled can clean and xql can query. This build renders
-//! the film and reading registers; findings, --refer, colour, and --json follow.
+//! Films a delimited file — or piped data — and reports what it is (see
+//! DESIGN.md). xray never writes: it observes, so xled can clean and xql can
+//! query.
 
 mod findings;
 mod json;
@@ -11,8 +11,9 @@ mod resolve;
 mod scan;
 mod theme;
 
-use std::io::Write;
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::{IsTerminal, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anstream::{AutoStream, ColorChoice};
@@ -31,8 +32,8 @@ enum ColorWhen {
 #[derive(Parser)]
 #[command(name = "xray", version, about, long_about = None)]
 struct Cli {
-    /// The CSV/DSV file to profile.
-    file: PathBuf,
+    /// The CSV/DSV file to profile. Omit it, or give `-`, to read stdin.
+    file: Option<PathBuf>,
 
     /// Also suggest which family tool treats each finding (off by default).
     #[arg(long)]
@@ -82,18 +83,55 @@ fn parse_delim(s: &str) -> Result<u8, String> {
     Ok(c as u8)
 }
 
+/// What the render header and the JSON `file` field show for piped input. The
+/// parentheses keep it from being read as a filename that actually exists.
+const STDIN_NAME: &str = "(stdin)";
+
+/// The short label for a file: its bare name, so the header line stays short.
+fn display_name(path: &Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     // --no-header is the family spelling for --header 0; clap already rejects
     // the two together, so there is no disagreement left to resolve here.
     let header = if cli.no_header { Some(0) } else { cli.header };
-    match scan::scan(&cli.file, header, cli.delim) {
+
+    // `-` is the explicit spelling for stdin and omitting the file means the
+    // same thing — except that a bare `xray` at a terminal has no input coming,
+    // so it says so rather than sitting silently on a stdin nobody is writing
+    // to. An explicit `-` still blocks, the way `cat -` does: that was asked for.
+    let path = match cli.file.as_deref() {
+        Some(p) if p != Path::new("-") => Some(p),
+        Some(_) => None,
+        None if std::io::stdin().is_terminal() => {
+            eprintln!("xray: no input — give a file, or pipe data in");
+            return ExitCode::from(2);
+        }
+        None => None,
+    };
+
+    // Two labels, because they answer different questions: errors want the path
+    // as given so you can find the file, the render wants the bare name.
+    let source = path.map_or_else(|| STDIN_NAME.to_string(), |p| p.display().to_string());
+    let name = path.map_or_else(|| STDIN_NAME.to_string(), display_name);
+
+    let reader: Box<dyn Read> = match path {
+        Some(p) => match File::open(p) {
+            Ok(f) => Box::new(f),
+            Err(e) => {
+                eprintln!("xray: {source}: {e}");
+                return ExitCode::FAILURE;
+            }
+        },
+        None => Box::new(std::io::stdin().lock()),
+    };
+
+    match scan::scan(reader, header, cli.delim) {
         Ok(s) => {
-            let name = cli
-                .file
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| cli.file.display().to_string());
             if cli.json {
                 let value = json::to_json(&name, &s, cli.refer);
                 println!("{}", serde_json::to_string_pretty(&value).unwrap());
@@ -110,7 +148,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => {
-            eprintln!("xray: {}: {e}", cli.file.display());
+            eprintln!("xray: {source}: {e}");
             ExitCode::FAILURE
         }
     }

@@ -90,6 +90,7 @@ To remove it: swap `install.sh` for `uninstall.sh` in that line.
 
 ```sh
 xray data.csv                 # the full profile: film, reading, findings
+… | xray                      # profile piped data (`xray -` spells it explicitly)
 xray --refer data.csv         # also print which family tool treats each finding
 xray --json data.csv          # the same profile as structured JSON
 xray --header 6 data.csv      # force the header to row 6 (0 = no header)
@@ -99,6 +100,8 @@ xray --color never data.csv   # plain output (also automatic when piped)
 ```
 
 xray auto-detects a buried header, sniffs the delimiter (quote-aware), and colours the output for a terminal while emitting plain text to a pipe. Everything it needs, it gathers in a single pass over the file. Both guesses can be overruled: `--header` or `--no-header` for the header row, `-d`/`--delim` for the delimiter.
+
+Input comes from a file argument or from stdin, so xray sits in a pipe like the rest of the family; a piped profile reports its source as `(stdin)` and is otherwise identical to the same bytes read from disk.
 
 ## Use it from Claude Code
 

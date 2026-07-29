@@ -4,7 +4,8 @@
 //! IDs) so a future change can't silently regress them. Fixtures are synthetic
 //! by policy — real client data never enters this repo.
 
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
@@ -13,6 +14,27 @@ fn run(args: &[&str]) -> (String, i32) {
         .args(args)
         .output()
         .expect("failed to run xray");
+    (
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        out.status.code().unwrap_or(-1),
+    )
+}
+
+/// Run xray with `input` on stdin rather than a file argument.
+fn run_piped(args: &[&str], input: &[u8]) -> (String, i32) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_xray"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("failed to run xray");
+    child
+        .stdin
+        .take()
+        .expect("no stdin")
+        .write_all(input)
+        .expect("failed to write to xray's stdin");
+    let out = child.wait_with_output().expect("failed to wait for xray");
     (
         String::from_utf8_lossy(&out.stdout).into_owned(),
         out.status.code().unwrap_or(-1),
@@ -172,6 +194,48 @@ fn no_header_with_an_explicit_header_row_is_refused() {
         code, 0,
         "--no-header and --header disagree; that must not pass"
     );
+}
+
+/// Profile piped bytes, asserting a clean exit and returning the parsed JSON.
+fn profile_piped(args: &[&str], path: &str) -> Value {
+    let input = std::fs::read(path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
+    let (stdout, code) = run_piped(args, &input);
+    assert_eq!(code, 0, "xray exited {code} on piped {path}");
+    serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("invalid json for piped {path}: {e}"))
+}
+
+#[test]
+fn piped_input_reads_the_same_as_the_file() {
+    let mut piped = profile_piped(&["--json"], "fixtures/messy/vendor_spend.csv");
+    let mut from_file = profile("fixtures/messy/vendor_spend.csv");
+    // The only honest difference: a pipe has no filename to report.
+    assert_eq!(piped["file"], "(stdin)");
+    assert_eq!(from_file["file"], "vendor_spend.csv");
+    piped["file"] = Value::Null;
+    from_file["file"] = Value::Null;
+    assert_eq!(
+        piped, from_file,
+        "a pipe and a file must profile identically"
+    );
+}
+
+#[test]
+fn dash_is_the_explicit_spelling_for_stdin() {
+    let dash = profile_piped(&["--json", "-"], "fixtures/clean/employees.csv");
+    let bare = profile_piped(&["--json"], "fixtures/clean/employees.csv");
+    assert_eq!(dash, bare, "`-` and an omitted file both mean stdin");
+}
+
+#[test]
+fn flags_still_apply_over_a_pipe() {
+    // The overrides are not a file-only feature — a pipe is the case where a
+    // sniff has the least to go on, so they matter more there, not less.
+    let v = profile_piped(
+        &["--json", "--no-header", "--delim", ","],
+        "fixtures/clean/employees.csv",
+    );
+    assert_eq!(v["film"]["header_row"], 0);
+    assert_eq!(v["film"]["delimiter"], ",");
 }
 
 #[test]

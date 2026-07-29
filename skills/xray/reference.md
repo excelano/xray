@@ -7,12 +7,15 @@ the `--json` schema. xray reads a delimited file and reports on it; it never wri
 ## Invocation and flags
 
 ```
-xray [OPTIONS] <FILE>
+xray [OPTIONS] [FILE]
 ```
 
-`<FILE>` is required — xray profiles a file, not stdin (a rewindable source is needed for
-the header look-ahead, so piping is not wired yet). Human output goes to stdout; there is
-no in-place mode and no output file, because xray does not mutate.
+`[FILE]` is optional: omit it, or give `-`, and xray profiles stdin instead, reporting the
+source as `(stdin)`. A pipe and a file produce an identical profile — the whole input is
+read before parsing either way, since the delimiter sniff and the header look-ahead both
+re-read the front. A bare `xray` at a terminal, with nothing piped in, is a usage error
+rather than a silent wait. Human output goes to stdout; there is no in-place mode and no
+output file, because xray does not mutate.
 
 | Flag | Meaning |
 |---|---|
@@ -144,6 +147,5 @@ as text). `top` is populated only for the `categorical` class.
 ## What xray does not do
 
 No writing, no in-place edit, no output file — cleaning is xled's job. No query, join,
-aggregate, group, sort, pivot, or row filter — that is SQL/DuckDB (xql). No stdin yet
-(the header look-ahead needs a rewindable source). xray reads a file and reports; the
-`--refer` block names where to go next.
+aggregate, group, sort, pivot, or row filter — that is SQL/DuckDB (xql). xray reads and
+reports; the `--refer` block names where to go next.

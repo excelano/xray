@@ -5,9 +5,7 @@
 //! larger than xled can hold. Nothing here mutates or filters — it observes.
 
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::Read;
-use std::path::Path;
 
 /// Distinct values tracked exactly up to this many per column; beyond it the
 /// count is reported as `CAP+`. A corpus-tuning knob (DESIGN.md, open item 3).
@@ -396,8 +394,12 @@ fn process_row(
 /// `delim_override` is the `--delim` value: `None` sniffs. Sniffing is right far
 /// more often than not, but when it misses there has to be a way to say so —
 /// otherwise the one file xray cannot read is the one you most need it for.
-pub fn scan(
-    path: &Path,
+///
+/// The input is any reader, so a file and a pipe take the same path. Both are
+/// read to the end before parsing — the delimiter sniff and the buried-header
+/// look-ahead both need to re-read the front, and a pipe cannot rewind.
+pub fn scan<R: Read>(
+    mut input: R,
     header_choice: HeaderChoice,
     delim_override: Option<u8>,
 ) -> std::io::Result<Scan> {
@@ -405,7 +407,7 @@ pub fn scan(
     const LOOKAHEAD: usize = 1000;
 
     let mut raw = Vec::new();
-    File::open(path)?.read_to_end(&mut raw)?;
+    input.read_to_end(&mut raw)?;
     let bytes = raw.len() as u64;
 
     let bom = raw.starts_with(&[0xEF, 0xBB, 0xBF]);
