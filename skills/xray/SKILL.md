@@ -26,9 +26,10 @@ ranked list of **findings**. It never writes.
 
 The authoritative sources for xray's behavior are the binary itself (`xray --help`) and
 the [README](https://github.com/excelano/xray/blob/main/README.md); if anything here
-conflicts with them, they win. These recipes assume **xray 0.1.0 or newer**. Check with
-`xray --version`; upgrade with `sudo apt install --only-upgrade xray` (Debian/Ubuntu),
-`brew upgrade xray` (macOS), or by re-running the install one-liner from the README.
+conflicts with them, they win. If a flag or section described here is missing from
+`xray --help`, the installed copy predates it: upgrade with `sudo apt install
+--only-upgrade xray` (Debian/Ubuntu), `brew upgrade xray` (macOS), or by re-running the
+install one-liner from the README.
 
 ## The family, and the one rule that places xray
 
