@@ -392,7 +392,15 @@ fn process_row(
 
 /// Run the streaming pass. Buffers a bounded look-ahead (preamble is always near
 /// the top) to locate the header, then streams the remainder as data.
-pub fn scan(path: &Path, header_choice: HeaderChoice) -> std::io::Result<Scan> {
+///
+/// `delim_override` is the `--delim` value: `None` sniffs. Sniffing is right far
+/// more often than not, but when it misses there has to be a way to say so —
+/// otherwise the one file xray cannot read is the one you most need it for.
+pub fn scan(
+    path: &Path,
+    header_choice: HeaderChoice,
+    delim_override: Option<u8>,
+) -> std::io::Result<Scan> {
     /// How far to look for a buried header before giving up. Bounds the buffer.
     const LOOKAHEAD: usize = 1000;
 
@@ -406,7 +414,7 @@ pub fn scan(path: &Path, header_choice: HeaderChoice) -> std::io::Result<Scan> {
     let crlf = body.windows(2).take(4096).any(|w| w == b"\r\n");
 
     let sample = &body[..body.len().min(16 * 1024)];
-    let delimiter = sniff_delimiter(sample);
+    let delimiter = delim_override.unwrap_or_else(|| sniff_delimiter(sample));
 
     // Decode lossily so a stray invalid-UTF-8 byte becomes a reported encoding
     // issue (the `utf8` flag above) rather than a fatal parse error. A profiler

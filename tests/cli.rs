@@ -20,9 +20,13 @@ fn run(args: &[&str]) -> (String, i32) {
 }
 
 fn profile(path: &str) -> Value {
-    let (stdout, code) = run(&["--json", path]);
-    assert_eq!(code, 0, "xray exited {code} on {path}");
-    serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("invalid json for {path}: {e}"))
+    profile_with(&["--json", path])
+}
+
+fn profile_with(args: &[&str]) -> Value {
+    let (stdout, code) = run(args);
+    assert_eq!(code, 0, "xray exited {code} on {args:?}");
+    serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("invalid json for {args:?}: {e}"))
 }
 
 fn kinds(v: &Value) -> Vec<String> {
@@ -125,6 +129,49 @@ fn long_ids_stay_text_and_do_not_corrupt_stats() {
 fn header_past_end_is_an_error_not_a_wrong_answer() {
     let (_, code) = run(&["--header", "99", "fixtures/clean/employees.csv"]);
     assert_ne!(code, 0, "--header past the last row should fail");
+}
+
+#[test]
+fn delim_override_beats_the_sniff() {
+    // The sniff reads employees.csv as comma-separated; --delim says otherwise
+    // and wins, collapsing every line into one field. Contrived here, but it is
+    // the escape hatch for a file whose delimiter the sniff genuinely misreads.
+    let v = profile_with(&["--json", "-d", ";", "fixtures/clean/employees.csv"]);
+    assert_eq!(v["film"]["delimiter"], ";");
+    assert_eq!(v["film"]["columns"], 1);
+}
+
+#[test]
+fn tab_delimiter_takes_the_backslash_t_escape() {
+    // A literal tab is awkward to type and most shells eat it, so `\t` spells it.
+    // The fixture's commas sit inside values, so this also fails loudly if the
+    // escape were ignored and the sniff picked comma instead.
+    let v = profile_with(&["--json", "--delim", "\\t", "fixtures/clean/regions.tsv"]);
+    assert_eq!(v["film"]["delimiter"], "\t");
+    assert_eq!(v["film"]["columns"], 2);
+    assert_eq!(column(&v, "B")["class"], "int");
+}
+
+#[test]
+fn no_header_matches_header_zero() {
+    let sugar = profile_with(&["--json", "--no-header", "fixtures/clean/employees.csv"]);
+    let explicit = profile_with(&["--json", "--header", "0", "fixtures/clean/employees.csv"]);
+    assert_eq!(sugar["film"]["header_row"], 0);
+    assert_eq!(sugar, explicit, "--no-header must mean exactly --header 0");
+}
+
+#[test]
+fn no_header_with_an_explicit_header_row_is_refused() {
+    let (_, code) = run(&[
+        "--no-header",
+        "--header",
+        "2",
+        "fixtures/clean/employees.csv",
+    ]);
+    assert_ne!(
+        code, 0,
+        "--no-header and --header disagree; that must not pass"
+    );
 }
 
 #[test]

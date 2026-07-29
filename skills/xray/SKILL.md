@@ -52,6 +52,8 @@ xray file.csv                 # profile the file: film, reading, findings
 xray --refer file.csv         # …also name which family tool treats each finding
 xray --json file.csv          # the same profile as structured JSON (for a program)
 xray --header 3 file.csv      # force row 3 as the header (0 = no header)
+xray --no-header file.csv     # the first row is data, not a header
+xray -d '|' file.csv          # force the delimiter when the sniff misreads it
 xray --color never file.csv   # plain output (auto-off when piped anyway)
 ```
 
@@ -61,8 +63,10 @@ is nothing for xray to write.
 
 Flags: `--refer` (add the opt-in referral block, off by default), `--json` (machine
 output), `--header <ROW>` (1-based; `0` = treat row 1 as data; omit to auto-detect a
-buried header), `--color auto|always|never` (auto colours a terminal, goes plain when
-piped, honours `NO_COLOR`).
+buried header), `--no-header` (the family spelling for `--header 0`; giving both is an
+error), `-d`/`--delim <CHAR>` (override the sniffed delimiter; `\t` spells tab),
+`--color auto|always|never` (auto colours a terminal, goes plain when piped, honours
+`NO_COLOR`).
 
 ## The three registers (what the output means)
 
