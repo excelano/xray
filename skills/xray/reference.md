@@ -19,7 +19,7 @@ output file, because xray does not mutate.
 
 | Flag | Meaning |
 |---|---|
-| `--refer` | also print the REFERRAL block: which family tool (xled / xql) treats each class of finding present. Off by default — the profile stands on its own |
+| `--refer` | also print the REFERRAL block: which family tool (xled / xql) treats each finding, named by column, with a runnable command where the repair is unambiguous. Off by default — the profile stands on its own — but an agent should always pass it |
 | `--json` | emit the profile as JSON instead of the human render. Always plain (no colour). Stable `class` / `kind` / `column` keys for a machine reader |
 | `--header <ROW>` | set the header row explicitly, 1-based. `0` means the file has no header (row 1 is data). Out of range is an error, not a clamp. Omit to auto-detect a buried header |
 | `--color <WHEN>` | `auto` (default) colours a terminal and goes plain when piped or read by a program (honours `NO_COLOR`); `always` forces colour; `never` forces plain |
@@ -59,13 +59,30 @@ structure notes (shape smells).
 
 ### REFERRAL — opt-in hand-off (`--refer` only)
 
-Maps the findings present to the treating tool. Empty when there is nothing to hand off.
+Hands each hazard to the treating tool, naming the column it is about. Empty when there
+is nothing to hand off.
 
-| Trigger | Tool | Action |
-|---|---|---|
-| ragged / total / spacer rows | xled | crop to the real table, drop the summary line |
-| leading-zero / currency text | xled | keep IDs as text; `round(num(),2)` only at math time |
-| numbers trapped as text | xql | filter or aggregate once those columns are clean |
+| Trigger | Tool | Action | Command |
+|---|---|---|---|
+| preamble rows above the header | xled | read with `--no-header`, crop, promote the header row | — |
+| pre-aggregated row *n* | xled | crop past the summary line before aggregating | — |
+| *n* ragged rows | xled | repair the stray delimiters; later addresses depend on the width | — |
+| *col* is currency text | xled | strip the formatting before any math | `xled '[col] s/[$,]//g' file.csv` |
+| *cols* stay text | xled | a numeric cast strips the zeros — cast at math time, not in the file | — |
+| numbers trapped as text | xql | filter or aggregate once those columns are clean | — |
+
+A command appears only where the repair follows unambiguously from what xray can see. The
+blanks are not gaps waiting to be filled: which boolean spelling wins, what a duplicate
+header becomes, and whether a sparse column is merged cells or optional data are decisions
+the profiler is not entitled to make, and a plausible guess that happens to run is worse
+than silence.
+
+Commands read rather than write — no `-i`. xray never changes a byte and does not hand
+over something that changes one by proxy; the preview is where the transform gets checked.
+
+Column addressing is the bracketed header name, falling back to the spreadsheet letter
+when the header is blank or contains a `]`. The file path is shell-quoted when it needs
+it, and omitted entirely for piped stdin, where there is no file to name.
 
 ## Column classes
 
@@ -135,7 +152,9 @@ reading: [ { letter, header, type, class, fill_pct, nonblank, total, distinct,
              distinct_capped, candidate_key, flag, min, max, examples, top } ]
 findings:[ { group, kind, column, subject, detail } ]
 verdict: "2 correctness · 4 type safety · 1 structure"   (or "clean — nothing flagged")
-referral:[ { trigger, tool, action } ]                    (only with --refer)
+referral:[ { trigger, tool, action, command } ]           (only with --refer;
+                                                           command is null unless the
+                                                           repair is unambiguous)
 ```
 
 A machine reader should branch on the stable `class` (reading) and `kind` (findings)

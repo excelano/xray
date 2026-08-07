@@ -244,3 +244,86 @@ fn piped_output_has_no_ansi_escapes() {
     let (stdout, _) = run(&["fixtures/messy/vendor_spend.csv"]);
     assert!(!stdout.contains('\u{1b}'), "piped output must be plain");
 }
+
+// ---- referral (--refer) ----
+
+fn referrals(v: &Value) -> &Vec<Value> {
+    v["referral"].as_array().expect("no referral array")
+}
+
+#[test]
+fn referral_is_absent_until_asked_for() {
+    let v = profile("fixtures/messy/vendor_spend.csv");
+    assert!(
+        v.get("referral").is_none(),
+        "referral must stay opt-in; it appeared without --refer"
+    );
+}
+
+#[test]
+fn referral_names_the_column_it_is_about() {
+    let v = profile_with(&["--json", "--refer", "fixtures/messy/vendor_spend.csv"]);
+    let currency = referrals(&v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains("currency text"))
+        .expect("no currency referral");
+    // The aggregate phrasing this replaced ("leading-zero / currency text")
+    // left the reader to work out which column was meant.
+    assert!(
+        currency["trigger"]
+            .as_str()
+            .unwrap()
+            .contains("FY25 Spend ($)"),
+        "trigger {:?} does not name its column",
+        currency["trigger"]
+    );
+}
+
+#[test]
+fn currency_referral_emits_a_runnable_command() {
+    let path = "fixtures/messy/vendor_spend.csv";
+    let v = profile_with(&["--json", "--refer", path]);
+    let cmd = referrals(&v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains("currency text"))
+        .and_then(|r| r["command"].as_str())
+        .expect("currency referral carries no command");
+
+    // Addressed by bracketed header name, which is what survives a header
+    // holding spaces, parens and a `$` — the case that would otherwise send an
+    // agent back to guessing.
+    assert_eq!(cmd, format!("xled '[FY25 Spend ($)] s/[$,]//g' {path}"));
+    // Read, not write: xray never changes a byte and must not hand over
+    // something that does it by proxy.
+    assert!(
+        !cmd.contains(" -i"),
+        "referral command must not write in place"
+    );
+}
+
+#[test]
+fn referrals_without_an_unambiguous_repair_carry_no_command() {
+    let v = profile_with(&["--json", "--refer", "fixtures/messy/vendor_spend.csv"]);
+    let protect = referrals(&v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains("stays text"))
+        .expect("no leading-zero referral");
+    // The correct action here is to do nothing, so there is nothing to run.
+    assert!(protect["command"].is_null());
+}
+
+#[test]
+fn piped_input_gets_referrals_but_no_commands() {
+    let v = profile_piped(&["--json", "--refer"], "fixtures/messy/vendor_spend.csv");
+    assert!(
+        !referrals(&v).is_empty(),
+        "stdin should still get referrals"
+    );
+    for r in referrals(&v) {
+        assert!(
+            r["command"].is_null(),
+            "stdin has no file to name, so {:?} cannot carry a command",
+            r["trigger"]
+        );
+    }
+}

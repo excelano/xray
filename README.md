@@ -91,7 +91,8 @@ To remove it: swap `install.sh` for `uninstall.sh` in that line.
 ```sh
 xray data.csv                 # the full profile: film, reading, findings
 … | xray                      # profile piped data (`xray -` spells it explicitly)
-xray --refer data.csv         # also print which family tool treats each finding
+xray --refer data.csv         # also print which family tool treats each finding,
+                              # with the command to run where the repair is clear
 xray --json data.csv          # the same profile as structured JSON
 xray --header 6 data.csv      # force the header to row 6 (0 = no header)
 xray --no-header data.csv     # the first row is data, not a header

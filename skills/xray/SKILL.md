@@ -47,11 +47,18 @@ reach for, and why. When you already know the file, skip it.
 
 ## Running it
 
+**Always pass `--refer`.** It is off by default because a person reading their own file
+already knows the family and does not need to be told where xled is. You are not that
+reader: the referral block is how you learn which sibling treats each hazard, and for the
+cases with one unambiguous repair it hands you the command already written against this
+file's name and headers. Running without it throws that away and leaves you guessing at
+addressing you could have been given.
+
 ```sh
-xray file.csv                 # profile the file: film, reading, findings
-… | xray                      # profile piped data (`xray -` spells it explicitly)
-xray --refer file.csv         # …also name which family tool treats each finding
-xray --json file.csv          # the same profile as structured JSON (for a program)
+xray --refer file.csv         # the default invocation for an agent
+xray file.csv                 # profile only: film, reading, findings
+… | xray --refer              # piped data (`xray -` spells stdin explicitly)
+xray --json --refer file.csv  # the same profile as structured JSON (for a program)
 xray --header 3 file.csv      # force row 3 as the header (0 = no header)
 xray --no-header file.csv     # the first row is data, not a header
 xray -d '|' file.csv          # force the delimiter when the sniff misreads it
@@ -89,10 +96,30 @@ smells: empty/spacer columns, constant columns, duplicate keys, sparse columns, 
 headers). Correctness and type-safety items are marked `!`; structure notes are marked
 `·`. A clean file prints `FINDINGS  (0)   clean — nothing flagged`.
 
-**REFERRAL** (only with `--refer`) — maps the findings present to the family tool that
-treats them: ragged/total/spacer rows → xled crop; leading-zero/currency text → xled keep
--as-text then round at math time; numbers trapped as text → xql once the columns are
-clean.
+**REFERRAL** (only with `--refer`) — hands each hazard to the sibling that treats it,
+naming the column it is about: preamble and pre-aggregated and ragged rows → xled;
+currency text → xled; leading-zero and long-ID columns → xled, where the right move is to
+leave them alone; numbers trapped as text → xql once those columns are clean.
+
+Where the repair is a single unambiguous invocation, the referral prints **the command**
+on the line beneath it, already addressed to this file's name and headers:
+
+```
+FY25 Spend ($) (E) is currency text → xled   strip the formatting before any math
+    xled '[FY25 Spend ($)] s/[$,]//g' vendor_spend.csv
+```
+
+Run it as given. The bracket addressing is what survives a header carrying spaces, parens
+or a `$`, which is where hand-written addressing usually goes wrong.
+
+Most referrals carry no command, and that is deliberate rather than unfinished. xray emits
+one only where the fix follows from what it can see. Which boolean spelling should win,
+what a duplicate header ought to become, whether a sparse column is merged cells or
+genuinely optional data — those are yours to decide, and a profiler guessing at them would
+produce a command that runs and is wrong. Read the prose and write the command yourself.
+
+The commands **read rather than write**: there is no `-i`, so you see the transform before
+it touches anything. Add `-i` once the preview is right.
 
 ## The type model (the part that matters)
 
@@ -114,14 +141,13 @@ noise (`449.29999999999995`), that is an already-damaged value, not xray's round
 
 ```sh
 # profile an unfamiliar export first — what is it, and what will bite?
-xray vendor_spend.csv
+xray --refer vendor_spend.csv
 #   → FILM: 8 cols × 10 rows, header row 1
 #   → READING flags column B leading-0, E currency+float-noise, F mixed, G mixed-bool
 #   → FINDINGS: ragged row 11, total row 10, then the type-safety items
-# now you know: crop the total row and fix currency with xled, then query with xql.
-
-# get the tool hand-offs spelled out
-xray --refer vendor_spend.csv
+#   → REFERRAL: the sibling for each hazard, and for the currency column the
+#     command to run — xled '[FY25 Spend ($)] s/[$,]//g' vendor_spend.csv
+# now you know the order: repair the rows, strip the currency, then query with xql.
 
 # a title block above the real header? force it, or let auto-detect try
 xray --header 4 quarterly_report.csv

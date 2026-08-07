@@ -18,7 +18,10 @@ fn top_values(col: &crate::scan::Column, n: usize) -> Vec<Value> {
         .collect()
 }
 
-pub fn to_json(name: &str, scan: &Scan, refer: bool) -> Value {
+/// `name` is the short label carried in the document; `path` is the input file
+/// as the caller named it, used to write copy-pasteable referral commands, and
+/// is `None` for piped stdin.
+pub fn to_json(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Value {
     // ---- reading ----
     let reading: Vec<Value> = scan
         .columns
@@ -96,9 +99,16 @@ pub fn to_json(name: &str, scan: &Scan, refer: bool) -> Value {
     });
 
     if refer {
-        let refs: Vec<Value> = findings::referral(scan)
+        let refs: Vec<Value> = findings::referral(scan, path)
             .iter()
-            .map(|r| json!({ "trigger": r.trigger, "tool": r.tool, "action": r.action }))
+            .map(|r| {
+                json!({
+                    "trigger": r.trigger,
+                    "tool": r.tool,
+                    "action": r.action,
+                    "command": r.command,
+                })
+            })
             .collect();
         root["referral"] = Value::Array(refs);
     }

@@ -26,7 +26,10 @@ fn delim_name(d: u8) -> String {
     }
 }
 
-pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
+/// `name` is the short label for the header line; `path` is the input file as
+/// the caller named it, used to write copy-pasteable referral commands, and is
+/// `None` for piped stdin.
+pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> String {
     let mut out = String::new();
     out.push_str(&format!("{} · {name}\n\n", paint(theme::HEADER, "xray")));
 
@@ -166,16 +169,25 @@ pub fn render(name: &str, scan: &Scan, refer: bool) -> String {
 
     // ---- REFERRAL (opt-in) ----
     if refer {
-        let refs = findings::referral(scan);
+        let refs = findings::referral(scan, path);
         if !refs.is_empty() {
             out.push('\n');
             out.push_str(&paint(theme::HEADER, "REFERRAL"));
             out.push('\n');
             for r in refs {
+                // The space before the arrow is load-bearing: a trigger that
+                // names a long header runs past the padding, and without it the
+                // text collides with the arrow it is supposed to point at.
                 out.push_str(&format!(
-                    "  {:<32}→ {:<6} {}\n",
+                    "  {:<31} → {:<6} {}\n",
                     r.trigger, r.tool, r.action
                 ));
+                // The command sits on its own line under the referral it
+                // belongs to, indented past the trigger column, so it can be
+                // copied without picking up the prose around it.
+                if let Some(cmd) = &r.command {
+                    out.push_str(&format!("  {}\n", paint(theme::FAINT, &format!("  {cmd}"))));
+                }
             }
         }
     }

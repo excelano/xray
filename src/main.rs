@@ -133,7 +133,7 @@ fn main() -> ExitCode {
     match scan::scan(reader, header, cli.delim) {
         Ok(s) => {
             if cli.json {
-                let value = json::to_json(&name, &s, cli.refer);
+                let value = json::to_json(&name, path.map(|_| source.as_str()), &s, cli.refer);
                 println!("{}", serde_json::to_string_pretty(&value).unwrap());
                 return ExitCode::SUCCESS;
             }
@@ -142,7 +142,7 @@ fn main() -> ExitCode {
                 ColorWhen::Always => ColorChoice::Always,
                 ColorWhen::Never => ColorChoice::Never,
             };
-            let text = render::render(&name, &s, cli.refer);
+            let text = render::render(&name, path.map(|_| source.as_str()), &s, cli.refer);
             let mut out = AutoStream::new(std::io::stdout(), choice);
             let _ = out.write_all(text.as_bytes());
             ExitCode::SUCCESS

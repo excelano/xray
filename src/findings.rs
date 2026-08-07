@@ -283,55 +283,151 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
     out
 }
 
-/// One referral: a class of finding and the family tool that treats it.
+/// One referral: a class of finding, the family tool that treats it, and — when
+/// the repair reduces to a single invocation — the command to run.
 pub struct Referral {
-    pub trigger: &'static str,
+    pub trigger: String,
     pub tool: &'static str,
-    pub action: &'static str,
+    pub action: String,
+    /// A ready-to-run command, when one exists.
+    ///
+    /// Most referrals carry none, and that is not a gap to fill later. A command
+    /// is only emitted where the repair is unambiguous from what xray can see:
+    /// which boolean spelling should win, what a duplicate header ought to be
+    /// renamed to, and whether a sparse column is merged cells or genuinely
+    /// optional data are all judgements the profiler is not entitled to make.
+    /// Emitting a plausible guess there would be worse than emitting nothing,
+    /// because a command that runs is a command that gets trusted.
+    ///
+    /// The command reads rather than writes — no `-i`. xray never changes a
+    /// byte, and it should not hand over something that does it by proxy; the
+    /// preview is the step where the operator confirms the transform is right.
+    pub command: Option<String>,
 }
 
-/// The opt-in referral (`--refer`): map the findings present to the family tool
-/// that treats them. Off by default — the primary user already knows the family;
-/// this waits to be asked. Empty when there is nothing to hand off.
-pub fn referral(scan: &Scan) -> Vec<Referral> {
-    let has_rows = !scan.ragged.is_empty() || !scan.total_rows.is_empty();
-    let mut spacer = false;
-    let mut leading = false;
-    let mut currency = false;
-    let mut mixed = false;
-    for col in &scan.columns {
+/// Quote a path for the emitted command when the shell would otherwise mangle it.
+fn shell_quote(path: &str) -> String {
+    if !path.is_empty()
+        && path
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/'))
+    {
+        path.to_string()
+    } else {
+        format!("'{}'", path.replace('\'', r"'\''"))
+    }
+}
+
+/// How to address a column in an emitted command: by header name when it has
+/// one, falling back to the spreadsheet letter when the name is blank or
+/// carries the `]` that would close the bracket early.
+fn address(header: &str, letter: &str) -> String {
+    let h = header.trim();
+    if h.is_empty() || h.contains(']') {
+        letter.to_string()
+    } else {
+        format!("[{h}]")
+    }
+}
+
+/// The opt-in referral (`--refer`): hand each class of finding to the family
+/// tool that treats it, naming the column it is about and, where the repair is
+/// a single unambiguous invocation, the command itself.
+///
+/// Off by default — the primary user already knows the family; this waits to be
+/// asked. Empty when there is nothing to hand off. `path` is the input file as
+/// the caller named it, and is `None` for piped stdin, where no command can be
+/// written because there is no file to name.
+pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
+    let mut refs = Vec::new();
+    let file = path.map(shell_quote);
+
+    // ---- structure: the table is not where the addresses say it is ----
+    if scan.preamble > 0 {
+        refs.push(Referral {
+            trigger: format!("rows 1–{} above the header", scan.preamble),
+            tool: "xled",
+            action: format!(
+                "read with --no-header, crop to the table, promote row {}",
+                scan.header_row
+            ),
+            // Three interacting pieces (--no-header, a crop range, a header
+            // promotion) whose correct spelling depends on where the data ends.
+            // Left as prose deliberately: a wrong crop silently discards rows.
+            command: None,
+        });
+    }
+    if !scan.total_rows.is_empty() {
+        let rows: Vec<String> = scan.total_rows.iter().map(|(r, _)| r.to_string()).collect();
+        refs.push(Referral {
+            trigger: format!(
+                "pre-aggregated row{} {}",
+                if rows.len() == 1 { "" } else { "s" },
+                rows.join(", ")
+            ),
+            tool: "xled",
+            action: "crop past the summary line before aggregating".into(),
+            command: None,
+        });
+    }
+    if !scan.ragged.is_empty() {
+        refs.push(Referral {
+            trigger: format!(
+                "{} ragged row{}",
+                scan.ragged.len(),
+                if scan.ragged.len() == 1 { "" } else { "s" }
+            ),
+            tool: "xled",
+            action: "repair the stray delimiters; every later address depends on the width".into(),
+            command: None,
+        });
+    }
+
+    // ---- per column ----
+    let mut protect: Vec<String> = Vec::new();
+    let mut trapped = false;
+    for (i, col) in scan.columns.iter().enumerate() {
         let r = resolve(col);
+        let letter = col_letter(i);
+        let addr = address(&col.header, &letter);
+        let label = col_name(&col.header, &letter);
+
         match r.class {
-            Class::LeadingZero | Class::LongId => leading = true,
-            Class::Currency => currency = true,
-            Class::Empty if col.header.trim().is_empty() => spacer = true,
+            Class::Currency => {
+                trapped = true;
+                refs.push(Referral {
+                    trigger: format!("{label} is currency text"),
+                    tool: "xled",
+                    action: "strip the formatting before any math".into(),
+                    command: file
+                        .as_ref()
+                        .map(|f| format!("xled '{addr} s/[$,]//g' {f}")),
+                });
+            }
+            Class::LeadingZero | Class::LongId => protect.push(label.clone()),
             _ => {}
         }
         if r.mixed_nonnumeric > 0 || r.bool_mixed {
-            mixed = true;
+            trapped = true;
         }
     }
 
-    let mut refs = Vec::new();
-    if has_rows || spacer {
+    // Collapsed into one line: the instruction is identical for every such
+    // column, and it is the one case where the correct action is to do nothing.
+    if !protect.is_empty() {
         refs.push(Referral {
-            trigger: "ragged / total / spacer rows",
+            trigger: format!("{} stays text", protect.join(", ")),
             tool: "xled",
-            action: "crop to the real table, drop the summary line",
+            action: "a numeric cast strips the zeros — cast at math time, not in the file".into(),
+            command: None,
         });
     }
-    if leading || currency {
+    if trapped {
         refs.push(Referral {
-            trigger: "leading-zero / currency text",
-            tool: "xled",
-            action: "keep IDs as text; round(num(),2) only at math time",
-        });
-    }
-    if currency || mixed {
-        refs.push(Referral {
-            trigger: "numbers trapped as text",
+            trigger: "numbers trapped as text".into(),
             tool: "xql",
-            action: "filter or aggregate once those columns are clean",
+            action: "filter or aggregate once those columns are clean".into(),
+            command: None,
         });
     }
     refs
