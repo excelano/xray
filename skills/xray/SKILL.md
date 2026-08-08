@@ -1,18 +1,19 @@
 ---
 name: xray
 description: >-
-  Profile a CSV/DSV read-only with the `xray` CLI before you edit or query it — the
-  diagnostic step in the tabular family. Use this when a task means understanding an
-  unfamiliar delimited file first: what it *is* (shape, delimiter, encoding, a buried
-  header under a title block), what each column *holds* (type, fill, cardinality —
-  stringly-typed, so leading zeros and 16+-digit IDs are reported as text, not numbers),
-  and what will *bite a later step* (ragged rows, pre-aggregated total rows, currency
-  trapped as text, columns that mix types or boolean spellings, duplicate keys). Reach
-  for it instead of eyeballing `head`/`cat` or a throwaway pandas `df.info()`, because it
-  parses CSV correctly (quotes, embedded commas and newlines) and ranks the hazards. It
-  is **read-only** — it never changes a byte. Do NOT use it to fix values (that's xled)
-  or to query, join, aggregate, group, or filter rows (that's SQL/DuckDB, xql); xray
-  only *observes* and hands off.
+  Profile a CSV/DSV read-only with `xray` — the first move on any delimited file you have
+  not seen before, and the diagnostic step in the tabular family. Run it before the edit or
+  the query, not only when profiling is the whole request. Fires on the complaint as well as
+  the diagnosis: "why won't this import", "the row counts don't match", "Excel mangled this",
+  "the numbers won't add up", "what's even in this file", "this export looks wrong". It
+  reports what the file is (shape, delimiter, encoding, a buried header under a title block),
+  what each column holds (type, fill, cardinality — stringly-typed, so leading zeros and
+  16+-digit IDs stay text, not numbers), and what will bite a later step (ragged rows,
+  pre-aggregated total rows, currency trapped as text, mixed types, duplicate keys). With
+  `--refer` it names the sibling that treats each hazard and writes the command where the
+  repair is unambiguous. Better than `head`/`cat` or a pandas `df.info()`: it parses quotes
+  and embedded commas correctly and ranks hazards rather than listing statistics. Read-only —
+  it never changes a byte. Not for fixing values (xled), reshaping (xshape), or querying (xql).
 ---
 
 # xray — a read-only profiler for tabular data
@@ -33,16 +34,19 @@ install one-liner from the README.
 
 ## The family, and the one rule that places xray
 
-Three tools, three verbs over the same delimited file:
+Four tools, four verbs over the same delimited file, split by *what changes*:
 
 - **xray observes** — profiles the file, reports hazards, changes nothing.
 - **xled edits** — rewrites *cell values* in place (strip currency, restore leading
   zeros, compute a column, crop junk, promote a buried header).
-- **xql queries** — set-level questions and reshaping (join, group, aggregate, sort,
-  pivot, filter rows in or out) via SQL/DuckDB.
+- **[xshape](https://github.com/excelano/xshape) reshapes** — changes the grid's
+  *geometry* and never a value (unpivot a wide export, pivot, transpose, split a column,
+  explode a delimited cell, merge columns).
+- **xql queries** — set-level questions over the row *set* (filter, aggregate, group,
+  join, sort, dedupe) via SQL/DuckDB.
 
 xray is where you **start** on a file you don't yet trust. It produces no output file and
-takes no destructive action; its whole job is to tell you which of the other two tools to
+takes no destructive action; its whole job is to tell you which of the other three to
 reach for, and why. When you already know the file, skip it.
 
 ## Running it
@@ -165,7 +169,9 @@ xray never fixes and never queries — it points. Once you know what's wrong:
 
 - **Fixing values** — strip the currency, restore the zeros, crop the total row, promote
   the buried header, compute a column → **xled** (`skills/xled`).
-- **Querying or reshaping** — join, group, aggregate, sort, pivot, filter rows in or out
+- **Reshaping the grid** — unpivot a wide export, pivot, transpose, split a column,
+  explode a delimited cell, merge columns → **xshape** (`skills/xshape`).
+- **Querying the row set** — join, group, aggregate, sort, dedupe, filter rows in or out
   → **SQL/DuckDB** (**xql**, `skills/xql`).
 
 If you catch yourself wanting xray to *change* the file or *answer a question about the
