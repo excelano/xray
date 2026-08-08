@@ -48,6 +48,8 @@ The other three act on the data; xray only looks. Its findings hand you off to t
 
 ## Install
 
+Every install line below ends with `xray --install-skill`. That installs the [Claude Code skill](#use-it-from-claude-code) alongside the binary, which is the one step people reliably skipped when it lived further down the page. Drop it if you do not use Claude Code — the CLI itself does not need it.
+
 ### Debian and Ubuntu
 
 Add the [Excelano apt repository](https://excelano.com/apt/) once:
@@ -59,7 +61,7 @@ curl -fsSL https://excelano.com/apt/setup.sh | sudo sh
 Then install it, so `apt upgrade` keeps it current:
 
 ```sh
-sudo apt install xray
+sudo apt install xray && xray --install-skill
 ```
 
 Both amd64 and arm64 packages ship with every release.
@@ -67,16 +69,31 @@ Both amd64 and arm64 packages ship with every release.
 ### Homebrew
 
 ```sh
-brew install excelano/tap/xray
+brew install excelano/tap/xray && xray --install-skill
 ```
 
 ### crates.io
 
 ```sh
-cargo install x-ray
+cargo install x-ray && xray --install-skill
 ```
 
 crates.io is the one place the name is hyphenated: the bare `xray` crate was taken (a dormant 2018 crate), so the crate publishes as `x-ray`. Everywhere else — the command, the apt package, the Homebrew formula — is `xray`. The installed binary is always `xray`.
+
+### Windows
+
+With [WinGet](https://learn.microsoft.com/windows/package-manager/), so `winget upgrade` keeps it current:
+
+```powershell
+winget install Excelano.xray
+xray --install-skill
+```
+
+Or run the standalone installer in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://github.com/excelano/xray/releases/latest/download/x-ray-installer.ps1 | iex"
+```
 
 ### Curl (any Linux or macOS)
 
@@ -106,14 +123,12 @@ Input comes from a file argument or from stdin, so xray sits in a pipe like the 
 
 ## Use it from Claude Code
 
-xray was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xray/`](skills/xray/). It teaches an agent the three registers (film, reading, findings), the stringly-typed classification (why leading zeros and long IDs stay text), how to read the ranked findings, and the hard boundary — xray only observes; fixing values is xled's job and querying is xql's — so an agent profiles a file first instead of guessing at it. Drop it into your personal skills directory:
+xray was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xray/`](skills/xray/). It teaches an agent the three registers (film, reading, findings), the stringly-typed classification (why leading zeros and long IDs stay text), how to read the ranked findings, and the hard boundary — xray only observes; fixing values is xled's job and querying is xql's — so an agent profiles a file first instead of guessing at it. The binary installs it:
 
 ```sh
-mkdir -p ~/.claude/skills/xray
-for f in SKILL.md reference.md; do
-  curl -fsSL "https://raw.githubusercontent.com/excelano/xray/main/skills/xray/$f" \
-    -o ~/.claude/skills/xray/$f
-done
+xray --install-skill
 ```
 
-Or, from a clone of this repo, `cp -r skills/xray ~/.claude/skills/`.
+That writes `~/.claude/skills/xray/` and stamps in the version it came from, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `xray --uninstall-skill` removes it. Restart Claude Code afterwards, since skills are discovered at session start.
+
+The skill is compiled into the binary, so this works the same however you installed xray — apt, Homebrew, cargo, the curl one-liner, or a build from source.
