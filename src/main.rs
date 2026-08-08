@@ -9,6 +9,7 @@ mod json;
 mod render;
 mod resolve;
 mod scan;
+mod skill;
 mod theme;
 
 use std::fs::File;
@@ -58,6 +59,14 @@ struct Cli {
     /// When to colourise: auto (default), always, or never.
     #[arg(long, value_name = "WHEN", default_value = "auto")]
     color: ColorWhen,
+
+    /// Install xray's Claude Code skill into ~/.claude/skills/xray and exit.
+    #[arg(long)]
+    install_skill: bool,
+
+    /// Remove the installed Claude Code skill and exit.
+    #[arg(long)]
+    uninstall_skill: bool,
 }
 
 /// Parse a `--delim` value: one ASCII character, or the escape `\t` for tab.
@@ -96,6 +105,14 @@ fn display_name(path: &Path) -> String {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // Terminal actions: they touch the user's skills directory and nothing
+    // else, so they run before any input is read or any file is opened.
+    if cli.install_skill {
+        return ExitCode::from(skill::install() as u8);
+    }
+    if cli.uninstall_skill {
+        return ExitCode::from(skill::uninstall() as u8);
+    }
     // --no-header is the family spelling for --header 0; clap already rejects
     // the two together, so there is no disagreement left to resolve here.
     let header = if cli.no_header { Some(0) } else { cli.header };
