@@ -232,7 +232,7 @@ pub type HeaderChoice = Option<usize>;
 /// inside quoted fields — the common `"1,200.00"` case — and pick a stray
 /// delimiter that happens to recur evenly.
 fn sniff_delimiter(sample: &[u8]) -> u8 {
-    const CANDIDATES: [u8; 4] = [b',', b'\t', b';', b'|'];
+    const CANDIDATES: [u8; 4] = *b",\t;|";
     let mut best = (b',', 0usize, 0usize); // (delim, modal_fields, rows_agreeing)
     for &d in &CANDIDATES {
         let mut rdr = csv::ReaderBuilder::new()
