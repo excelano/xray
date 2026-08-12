@@ -25,6 +25,12 @@ output file, because xray does not mutate.
 | `--color <WHEN>` | `auto` (default) colours a terminal and goes plain when piped or read by a program (honours `NO_COLOR`); `always` forces colour; `never` forces plain |
 | `-V`, `--version` / `-h`, `--help` | standard |
 
+xray exits `0` whether the file is clean or full of findings — it reports, it does not
+judge, so a caller must read the verdict rather than the exit status to learn what the
+file is. `1` means bad input: an unreadable file, undecodable data, a `--header` past the
+last row. `2` means a bad invocation: an unknown flag, a missing argument, contradictory
+options.
+
 ## The three registers
 
 ### FILM — the whole-file shot
@@ -150,15 +156,22 @@ film:    { columns, rows, bytes, delimiter, encoding, bom, line_endings,
            header_row, preamble, ragged_rows }
 reading: [ { letter, header, type, class, fill_pct, nonblank, total, distinct,
              distinct_capped, candidate_key, flag, min, max, examples, top } ]
-findings:[ { group, kind, column, subject, detail } ]
-verdict: "2 correctness · 4 type safety · 1 structure"   (or "clean — nothing flagged")
+findings:[ { group, severity, kind, column, subject, detail } ]
+verdict: { clean, total, worst, counts: { correctness, type_safety, structure },
+           summary }
 referral:[ { trigger, tool, action, command } ]           (only with --refer;
                                                            command is null unless the
                                                            repair is unambiguous)
 ```
 
 A machine reader should branch on the stable `class` (reading) and `kind` (findings)
-values, not on the prose `type`/`detail`/`subject` strings. `column` is the column letter
+values, not on the prose `type`/`detail`/`subject` strings. The same rule governs the
+verdict: read `clean`, `worst`, and `counts`, and leave `summary` (the sentence the
+human render prints) to a person. `group` is the snake-case key `correctness`,
+`type_safety`, or `structure`; `severity` collapses those three to the two levels the
+render draws as `!` and `·` — `warn` for correctness and type safety, `note` for
+structure. `worst` is the most severe group that actually fired, or `null` on a clean
+file. `column` is the column letter
 a finding is scoped to, or `null` for a row-level (correctness) finding. `min`/`max` are
 `null` for any non-numeric class (including `long_id`, which is numeric-looking but kept
 as text). `top` is populated only for the `categorical` class.

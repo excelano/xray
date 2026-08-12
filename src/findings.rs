@@ -33,6 +33,22 @@ impl Group {
             _ => '!',
         }
     }
+    /// Snake-case form of the label, for JSON keys that must be stable.
+    pub fn key(self) -> &'static str {
+        match self {
+            Group::Correctness => "correctness",
+            Group::TypeSafety => "type_safety",
+            Group::Structure => "structure",
+        }
+    }
+    /// The two-level severity the glyph already encodes: `!` warns, `·` notes.
+    /// Spelled out for a machine reader so it can triage without a glyph table.
+    pub fn severity(self) -> &'static str {
+        match self {
+            Group::Structure => "note",
+            _ => "warn",
+        }
+    }
 }
 
 pub struct Finding {
@@ -433,13 +449,16 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
     refs
 }
 
+/// The order the groups are reported in, most severe first.
+pub const GROUPS: [Group; 3] = [Group::Correctness, Group::TypeSafety, Group::Structure];
+
 /// One-line breakdown for the verdict header, e.g. "2 correctness · 3 type safety".
 pub fn verdict(findings: &[Finding]) -> String {
     if findings.is_empty() {
         return "clean — nothing flagged".into();
     }
     let mut parts = Vec::new();
-    for g in [Group::Correctness, Group::TypeSafety, Group::Structure] {
+    for g in GROUPS {
         let n = findings.iter().filter(|f| f.group == g).count();
         if n > 0 {
             parts.push(format!("{n} {}", g.label()));

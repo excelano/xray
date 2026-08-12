@@ -29,9 +29,18 @@ enum ColorWhen {
     Never,
 }
 
+/// What each exit status means, so a caller can branch on the number instead
+/// of on the message. Benign outcomes — a clean file, a file full of findings —
+/// are both success: xray reports, it does not judge.
+const EXIT_CODES: &str = "\
+Exit codes:
+  0  success, findings or not
+  1  bad input \u{2014} unreadable file, undecodable data
+  2  bad invocation \u{2014} unknown flag, missing argument, contradictory options";
+
 /// Profile a delimited file: columns, types, blanks, cardinality, top values.
 #[derive(Parser)]
-#[command(name = "xray", version, about, long_about = None)]
+#[command(name = "xray", version, about, long_about = None, after_help = EXIT_CODES)]
 struct Cli {
     /// The CSV/DSV file to profile. Omit it, or give `-`, to read stdin.
     file: Option<PathBuf>,

@@ -102,6 +102,47 @@ fn clean_file_gets_a_clean_bill() {
 }
 
 #[test]
+fn the_verdict_is_data_not_a_sentence_to_be_parsed() {
+    let clean = profile("fixtures/clean/employees.csv");
+    assert_eq!(clean["verdict"]["clean"], true);
+    assert_eq!(clean["verdict"]["total"], 0);
+    assert_eq!(clean["verdict"]["worst"], Value::Null);
+
+    let messy = profile("fixtures/messy/vendor_spend.csv");
+    assert_eq!(messy["verdict"]["clean"], false);
+    let counts = &messy["verdict"]["counts"];
+    let summed: u64 = ["correctness", "type_safety", "structure"]
+        .iter()
+        .map(|g| counts[g].as_u64().expect("count is a number"))
+        .sum();
+    assert_eq!(
+        summed,
+        messy["verdict"]["total"].as_u64().unwrap(),
+        "the per-group counts must add up to the total"
+    );
+    // `worst` names the most severe group that actually fired, in report order.
+    let worst = messy["verdict"]["worst"].as_str().expect("a worst group");
+    assert!(counts[worst].as_u64().unwrap() > 0);
+}
+
+#[test]
+fn every_finding_carries_a_machine_severity() {
+    let v = profile("fixtures/messy/vendor_spend.csv");
+    let fs = v["findings"].as_array().expect("findings array");
+    assert!(!fs.is_empty(), "fixture should produce findings");
+    for f in fs {
+        let group = f["group"].as_str().expect("a group");
+        let severity = f["severity"].as_str().expect("a severity");
+        assert!(
+            matches!(group, "correctness" | "type_safety" | "structure"),
+            "group must be the snake_case key, got {group:?}"
+        );
+        let expected = if group == "structure" { "note" } else { "warn" };
+        assert_eq!(severity, expected, "severity must follow the group");
+    }
+}
+
+#[test]
 fn buried_header_is_detected() {
     let v = profile("fixtures/messy/risk_log.csv");
     assert_eq!(v["film"]["header_row"], 6);

@@ -18,6 +18,29 @@ fn top_values(col: &crate::scan::Column, n: usize) -> Vec<Value> {
         .collect()
 }
 
+/// The verdict as data rather than as the prose the human render prints. A
+/// reader that had to regex `"2 type safety · 1 structure"` to learn whether
+/// the file is usable is a reader we made do our parsing; `clean` and `worst`
+/// answer that in one field each.
+fn verdict_json(fs: &[findings::Finding]) -> Value {
+    let mut counts = serde_json::Map::new();
+    let mut worst: Option<&'static str> = None;
+    for g in findings::GROUPS {
+        let n = fs.iter().filter(|f| f.group == g).count();
+        if n > 0 && worst.is_none() {
+            worst = Some(g.key());
+        }
+        counts.insert(g.key().to_string(), json!(n));
+    }
+    json!({
+        "clean": fs.is_empty(),
+        "total": fs.len(),
+        "worst": worst,
+        "counts": Value::Object(counts),
+        "summary": findings::verdict(fs),
+    })
+}
+
 /// `name` is the short label carried in the document; `path` is the input file
 /// as the caller named it, used to write copy-pasteable referral commands, and
 /// is `None` for piped stdin.
@@ -70,7 +93,8 @@ pub fn to_json(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Valu
         .iter()
         .map(|f| {
             json!({
-                "group": f.group.label(),
+                "group": f.group.key(),
+                "severity": f.group.severity(),
                 "kind": f.kind,
                 "column": f.column,
                 "subject": f.subject,
@@ -95,7 +119,7 @@ pub fn to_json(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Valu
         },
         "reading": reading,
         "findings": findings_json,
-        "verdict": findings::verdict(&fs),
+        "verdict": verdict_json(&fs),
     });
 
     if refer {
