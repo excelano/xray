@@ -426,6 +426,28 @@ fn e_notation_is_flagged_as_lost_digits_not_read_as_text() {
 }
 
 #[test]
+fn line_endings_are_counted_over_every_record_not_sampled() {
+    // Regression: the film read the first 4 KB and called a file CRLF if it
+    // saw one; a file that changes style partway through was mis-reported.
+    let (json, _) = run_piped(&["--json"], b"a,b\n1,2\r\n3,4\r\n");
+    let v: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["film"]["line_endings"], "mixed");
+    assert_eq!(kinds(&v), ["mixed_line_endings"]);
+
+    // Only record terminators count. An Excel export ends its rows CRLF while
+    // a wrapped cell holds bare LF; that is one style, not two.
+    let (json, _) = run_piped(&["--json"], b"id,note\r\n1,\"x\ny\"\r\n2,z\r\n");
+    let v: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["film"]["line_endings"], "CRLF");
+    assert!(kinds(&v).is_empty(), "{:?}", kinds(&v));
+
+    // No trailing newline on the last record is not a third style.
+    let (json, _) = run_piped(&["--json"], b"a,b\n1,2\n3,4");
+    let v: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["film"]["line_endings"], "LF");
+}
+
+#[test]
 fn header_past_end_is_an_error_not_a_wrong_answer() {
     let (_, code) = run(&["--header", "99", "fixtures/clean/employees.csv"]);
     assert_ne!(code, 0, "--header past the last row should fail");

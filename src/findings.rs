@@ -8,7 +8,7 @@
 //! during the corpus-tuning pass.
 
 use crate::resolve::{col_letter, resolve, Class};
-use crate::scan::Scan;
+use crate::scan::{LineEndings, Scan};
 
 /// Severity group. Also selects the glyph and the colour: Correctness and
 /// TypeSafety warn with `!`, Structure notes with `·`.
@@ -164,6 +164,18 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
     }
 
     // ---- structure (row-level) ----
+    if let LineEndings::Mixed { crlf, lf } = scan.line_endings {
+        out.push(Finding {
+            group: Group::Structure,
+            kind: "mixed_line_endings",
+            column: None,
+            subject: "mixed line endings".into(),
+            detail: format!(
+                "{crlf} row{} end CRLF and {lf} end LF — a line-based tool sees a stray carriage return on some rows",
+                if crlf == 1 { "" } else { "s" }
+            ),
+        });
+    }
     if scan.bom {
         out.push(Finding {
             group: Group::Structure,

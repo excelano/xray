@@ -112,7 +112,7 @@ pub fn to_json(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Valu
             "delimiter": (scan.delimiter as char).to_string(),
             "encoding": if scan.utf8 { "utf-8" } else { "non-utf-8" },
             "bom": scan.bom,
-            "line_endings": if scan.crlf { "CRLF" } else { "LF" },
+            "line_endings": scan.line_endings.as_str(),
             "header_row": scan.header_row,
             "preamble": scan.preamble,
             "ragged_rows": scan.ragged.len(),

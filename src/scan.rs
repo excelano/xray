@@ -233,6 +233,51 @@ impl Column {
     }
 }
 
+/// How the records end, counted over every record rather than sampled from
+/// the front. Only record terminators count: a newline inside a quoted cell is
+/// data, and an Excel export routinely ends its rows CRLF while the cells it
+/// wraps hold bare LF.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LineEndings {
+    Lf,
+    Crlf,
+    Mixed { crlf: usize, lf: usize },
+}
+
+impl LineEndings {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LineEndings::Lf => "LF",
+            LineEndings::Crlf => "CRLF",
+            LineEndings::Mixed { .. } => "mixed",
+        }
+    }
+}
+
+/// Tally of record terminators, fed the byte offset where each record starts;
+/// the bytes just before that offset are how the previous record ended.
+struct Terminators {
+    crlf: usize,
+    lf: usize,
+}
+
+impl Terminators {
+    fn before(&mut self, bytes: &[u8], start: usize) {
+        if start >= 2 && &bytes[start - 2..start] == b"\r\n" {
+            self.crlf += 1;
+        } else if start >= 1 && bytes[start - 1] == b'\n' {
+            self.lf += 1;
+        }
+    }
+    fn resolve(self) -> LineEndings {
+        match (self.crlf, self.lf) {
+            (0, _) => LineEndings::Lf,
+            (_, 0) => LineEndings::Crlf,
+            (crlf, lf) => LineEndings::Mixed { crlf, lf },
+        }
+    }
+}
+
 /// The whole-file reading produced by one streaming pass.
 pub struct Scan {
     pub columns: Vec<Column>,
@@ -242,7 +287,7 @@ pub struct Scan {
     pub header_row: usize,                // 1-based file row of the header; 0 = no header
     pub preamble: usize, // junk rows above a buried header (0 for a clean row-1 header)
     pub delimiter: u8,
-    pub crlf: bool,
+    pub line_endings: LineEndings,
     pub bom: bool,
     pub utf8: bool,
     pub bytes: u64,
@@ -439,7 +484,6 @@ pub fn scan<R: Read>(
     let bom = raw.starts_with(&[0xEF, 0xBB, 0xBF]);
     let body = if bom { &raw[3..] } else { &raw[..] };
     let utf8 = std::str::from_utf8(body).is_ok();
-    let crlf = body.windows(2).take(4096).any(|w| w == b"\r\n");
 
     let sample = &body[..body.len().min(16 * 1024)];
     let delimiter = delim_override.unwrap_or_else(|| sniff_delimiter(sample));
@@ -462,17 +506,25 @@ pub fn scan<R: Read>(
         header_row,
         preamble,
         delimiter,
-        crlf,
+        line_endings: LineEndings::Lf,
         bom,
         utf8,
         bytes,
     };
 
+    // Terminators are read off the record positions the parser reports, so
+    // the same offsets serve the buffered window and the streamed remainder.
+    let text = body_text.as_bytes();
+    let mut endings = Terminators { crlf: 0, lf: 0 };
+    let start_of = |rec: &csv::StringRecord| rec.position().map_or(0, |p| p.byte() as usize);
+
     // Buffer the look-ahead window.
     let mut records = rdr.records();
     let mut buf: Vec<csv::StringRecord> = Vec::new();
     for rec in records.by_ref() {
-        buf.push(rec?);
+        let rec = rec?;
+        endings.before(text, start_of(&rec));
+        buf.push(rec);
         if buf.len() >= LOOKAHEAD {
             break;
         }
@@ -532,6 +584,7 @@ pub fn scan<R: Read>(
     // Streamed remainder (absolute index continues past the buffer).
     for (offset, rec) in records.enumerate() {
         let rec = rec?;
+        endings.before(text, start_of(&rec));
         process_row(
             &rec,
             width,
@@ -543,6 +596,9 @@ pub fn scan<R: Read>(
         );
     }
 
+    // The last record's terminator, if it has one, is the tail of the input.
+    endings.before(text, text.len());
+
     Ok(Scan {
         columns,
         data_rows,
@@ -551,7 +607,7 @@ pub fn scan<R: Read>(
         header_row,
         preamble,
         delimiter,
-        crlf,
+        line_endings: endings.resolve(),
         bom,
         utf8,
         bytes,

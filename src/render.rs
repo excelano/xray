@@ -71,7 +71,7 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
         delim_name(scan.delimiter),
         if scan.utf8 { "utf-8" } else { "non-utf-8" },
         if scan.bom { " (BOM)" } else { "" },
-        if scan.crlf { "CRLF" } else { "LF" },
+        scan.line_endings.as_str(),
     ));
 
     // ---- READING ----
