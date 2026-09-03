@@ -101,9 +101,9 @@ The `class` (the stable JSON value) and its human label:
 | `leading_zero` | `text · leading-0` | all-digit values with a significant leading zero — flagged `keep as text` (a cast strips the zeros) |
 | `long_id` | `text · long-id` | an all-digit run of 16+ digits — exceeds exact numeric range, so it stays text and reports null min/max |
 | `currency` | `text · currency` | `$` and thousands-comma money — text until de-currencied; may flag `float-noise` |
-| `bool` | `bool` (or `bool · mixed-repr`) | boolean-valued; `mixed-repr` when more than one spelling family appears (Y/N vs yes/no vs true/false) |
-| `int` | `int` (or `int · MIXED`) | integers; `MIXED` when a few non-numeric values contaminate the column |
-| `decimal` | `decimal` | real numbers |
+| `bool` | `bool` (or `bool · mixed-repr`, `bool · MIXED`) | boolean-valued; `mixed-repr` when more than one spelling family appears (Y/N vs yes/no vs true/false); `MIXED` when stray non-boolean values (`NA`, `Unknown`) contaminate the column |
+| `int` | `int` (or `int · MIXED`) | integers; `MIXED` when a few non-numeric values (`n/a`, a lone `$5`) contaminate the column |
+| `decimal` | `decimal` (or `decimal · MIXED`) | real numbers; `MIXED` as for `int` |
 | `categorical` | `text · categorical` | low-cardinality text; detail shows the top values with counts |
 | `text` | `text` | free text |
 
@@ -127,7 +127,7 @@ render with `!`; structure with `·`.
 | `leading_zero` | leading-zero text — a numeric cast strips the zeros |
 | `long_id` | a 16+-digit numeric ID — exceeds exact number range, keep as text |
 | `currency_text` | `$`/comma currency (optionally plus float-precision noise) — de-currency before math |
-| `mixed_type` | a numeric-dominant column with stray non-numeric values — `num()` skips them |
+| `mixed_type` | a numeric-dominant column with stray non-numeric values (`num()` skips them), or a boolean-dominant column with stray non-boolean sentinels |
 | `mixed_bool` | a boolean column mixing spelling families — normalize before logic |
 
 **Structure** (shape smells; column-scoped unless noted):

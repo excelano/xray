@@ -56,7 +56,10 @@ pub struct Resolved {
     pub label: String,
     pub detail: String,
     pub flag: Option<String>,
-    pub mixed_nonnumeric: usize,
+    /// Cells that do not belong to the column's dominant kind — the stray `NA`
+    /// in a boolean column, the `$5` or `n/a` in a numeric one. Never hidden:
+    /// a minority the profile swallowed is the damage it exists to report.
+    pub mixed: usize,
     pub bool_mixed: bool,
     pub float_noise: bool,
 }
@@ -80,6 +83,14 @@ fn bool_family(v: &str) -> u8 {
         "true" | "false" => 2,
         "t" | "f" => 3,
         _ => 4,
+    }
+}
+
+fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
     }
 }
 
@@ -130,7 +141,7 @@ pub fn resolve(col: &Column) -> Resolved {
         label: "text".into(),
         detail: String::new(),
         flag: None,
-        mixed_nonnumeric: 0,
+        mixed: 0,
         bool_mixed: false,
         float_noise: col.float_noise,
     };
@@ -200,38 +211,49 @@ pub fn resolve(col: &Column) -> Resolved {
             ..base
         };
     }
+    // Everything past here is a majority read, so whatever is not the majority
+    // kind is contamination — the stray sentinel, the one formatted value.
+    //
     // Booleans, flagged only when the file mixes representation *families* —
     // Y/N with yes/no, say. Y and N alone are the two values of one family, not
     // mixed forms, so a plain Y/N column must not trip this.
     if booleans > 0 && booleans >= numeric && booleans >= text {
         let families: std::collections::HashSet<u8> =
             col.bool_reprs.iter().map(|v| bool_family(v)).collect();
-        let mixed = families.len() > 1;
+        let mixed_repr = families.len() > 1;
+        let mixed = col.nonblank - booleans;
+        let mut label = String::from("bool");
+        if mixed_repr {
+            label.push_str(" · mixed-repr");
+        }
+        if mixed > 0 {
+            label.push_str(" · MIXED");
+        }
         return Resolved {
             class: Class::Bool,
-            label: if mixed { "bool · mixed-repr" } else { "bool" }.into(),
+            label,
             detail: col.bool_reprs.join(" · "),
-            bool_mixed: mixed,
+            flag: (mixed > 0).then(|| format!("{mixed} non-boolean value{}", plural(mixed))),
+            mixed,
+            bool_mixed: mixed_repr,
             ..base
         };
     }
-    // Numeric-dominant. Any non-blank text is a mixed-type hazard.
+    // Numeric-dominant. Any other non-blank cell is a mixed-type hazard.
     if numeric > 0 && numeric >= text {
         let (class, name) = if decimals > ints {
             (Class::Decimal, "decimal")
         } else {
             (Class::Int, "int")
         };
-        if text > 0 {
+        let mixed = col.nonblank - numeric;
+        if mixed > 0 {
             return Resolved {
                 class,
                 label: format!("{name} · MIXED"),
                 detail: num_range(),
-                flag: Some(format!(
-                    "{text} non-numeric value{}",
-                    if text == 1 { "" } else { "s" }
-                )),
-                mixed_nonnumeric: text,
+                flag: Some(format!("{mixed} non-numeric value{}", plural(mixed))),
+                mixed,
                 ..base
             };
         }

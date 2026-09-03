@@ -212,23 +212,23 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                 detail: format!("{} — normalize before logic", col.bool_reprs.join(" / ")),
             });
         }
-        if r.mixed_nonnumeric > 0 {
+        if r.mixed > 0 {
+            let n = r.mixed;
+            let (s, them) = if n == 1 { ("", "it") } else { ("s", "them") };
+            let detail = if r.class == Class::Bool {
+                format!("boolean with {n} non-boolean value{s} — a stray sentinel breaks logic; normalize {them} first")
+            } else {
+                format!(
+                    "{} numeric with {n} non-numeric value{s} — num() skips {them}",
+                    r.class.as_str()
+                )
+            };
             out.push(Finding {
                 group: Group::TypeSafety,
                 kind: "mixed_type",
                 column: at.clone(),
                 subject: format!("{name} mixes types"),
-                detail: format!(
-                    "{} numeric with {} non-numeric value{} — num() skips {}",
-                    r.label.trim_end_matches(" · MIXED"),
-                    r.mixed_nonnumeric,
-                    if r.mixed_nonnumeric == 1 { "" } else { "s" },
-                    if r.mixed_nonnumeric == 1 {
-                        "it"
-                    } else {
-                        "them"
-                    },
-                ),
+                detail,
             });
         }
 
@@ -430,7 +430,7 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
             Class::LongId => long_id.push(label.clone()),
             _ => {}
         }
-        if r.mixed_nonnumeric > 0 || r.bool_mixed {
+        if r.mixed > 0 || r.bool_mixed {
             trapped = true;
         }
     }
