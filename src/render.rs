@@ -5,6 +5,16 @@ use crate::findings::{self, Group};
 use crate::resolve::{col_letter, resolve, Class};
 use crate::scan::Scan;
 use crate::theme::{self, paint};
+use unicode_width::UnicodeWidthStr;
+
+/// Left-align `s` in `width` terminal columns. `format!("{:<w$}")` pads by
+/// char count, which is wrong by one column per CJK character and by one the
+/// other way per combining mark; the reading table is aligned by display
+/// width instead.
+fn pad(s: &str, width: usize) -> String {
+    let fill = width.saturating_sub(s.width());
+    format!("{s}{}", " ".repeat(fill))
+}
 
 fn human_size(bytes: u64) -> String {
     if bytes < 1024 {
@@ -82,7 +92,7 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
     let name_w = scan
         .columns
         .iter()
-        .map(|c| c.header.chars().count().max(1))
+        .map(|c| c.header.width().max(1))
         .max()
         .unwrap_or(6)
         .max(6);
@@ -94,8 +104,9 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
         .max(4);
 
     out.push_str(&format!(
-        "  col  {:<name_w$}  {:<ty_w$}  fill  distinct  detail\n",
-        "header", "type",
+        "  col  {}  {:<ty_w$}  fill  distinct  detail\n",
+        pad("header", name_w),
+        "type",
     ));
     for (i, (col, read)) in scan.columns.iter().zip(&reads).enumerate() {
         let header = if col.header.trim().is_empty() {
@@ -130,8 +141,8 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
         // whether anstream keeps the codes or strips them.
         let detail = match &read.flag {
             Some(f) => format!(
-                "{:<24}  {}",
-                base_detail,
+                "{}  {}",
+                pad(&base_detail, 24),
                 paint(theme::WARN, &format!("! {f}"))
             ),
             None => base_detail,
@@ -143,9 +154,9 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
             " ".repeat(3usize.saturating_sub(letter.chars().count())),
         );
         out.push_str(&format!(
-            "  {}  {:<name_w$}  {:<ty_w$}  {:>3}%  {:>8}  {}\n",
+            "  {}  {}  {:<ty_w$}  {:>3}%  {:>8}  {}\n",
             letter_cell,
-            header,
+            pad(&header, name_w),
             read.label,
             fill,
             distinct,

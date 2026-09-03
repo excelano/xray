@@ -448,6 +448,41 @@ fn line_endings_are_counted_over_every_record_not_sampled() {
 }
 
 #[test]
+fn the_reading_aligns_by_display_width_not_char_count() {
+    // A CJK header is two terminal columns per character; padding by chars
+    // shifted every cell to its right by one column per character.
+    let (stdout, _) = run_piped(
+        &["--color", "never"],
+        "id,名前,note\n1,太郎,x\n2,花子,y\n".as_bytes(),
+    );
+    let rows: Vec<&str> = stdout
+        .lines()
+        .skip_while(|l| !l.starts_with("READING"))
+        .skip(2) // the title and the column-header line
+        .take_while(|l| !l.is_empty())
+        .collect();
+    assert_eq!(rows.len(), 3);
+    // The fill cell ends at the same display column on every row.
+    let fill_col = |l: &str| {
+        let upto = &l[..l.find('%').expect("a fill cell")];
+        unicode_width::UnicodeWidthStr::width(upto)
+    };
+    for row in &rows[1..] {
+        assert_eq!(fill_col(row), fill_col(rows[0]), "misaligned:\n{stdout}");
+    }
+}
+
+#[test]
+fn the_json_says_which_xray_wrote_it() {
+    let v = profile("fixtures/clean/employees.csv");
+    let (version, _) = run(&["--version"]);
+    assert_eq!(
+        format!("xray {}", v["xray"].as_str().unwrap()),
+        version.trim()
+    );
+}
+
+#[test]
 fn header_past_end_is_an_error_not_a_wrong_answer() {
     let (_, code) = run(&["--header", "99", "fixtures/clean/employees.csv"]);
     assert_ne!(code, 0, "--header past the last row should fail");
