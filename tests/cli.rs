@@ -235,6 +235,47 @@ fn the_currency_finding_names_what_it_saw() {
 }
 
 #[test]
+fn a_stray_sentinel_does_not_hide_inside_a_boolean_or_numeric_column() {
+    // Regression: Y/N/NA read as a clean `bool`, and `$5` in an int column
+    // vanished from the profile. Both are the minority the profile exists to
+    // report, so both fold into mixed_type.
+    let v = profile("fixtures/messy/contaminated.csv");
+    let active = column(&v, "B");
+    assert_eq!(active["class"], "bool");
+    assert_eq!(active["type"], "bool · MIXED");
+    assert_eq!(active["flag"], "1 non-boolean value");
+    let amt = column(&v, "C");
+    assert_eq!(amt["class"], "int");
+    assert_eq!(amt["type"], "int · MIXED");
+    assert_eq!(amt["flag"], "1 non-numeric value");
+    let mixed: Vec<&str> = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["kind"] == "mixed_type")
+        .map(|f| f["column"].as_str().unwrap())
+        .collect();
+    assert_eq!(mixed, ["B", "C"]);
+}
+
+#[test]
+fn row_and_distinct_counts_carry_thousands_separators() {
+    // The README shows `4,812 rows`; the render must agree with it.
+    let mut input = String::from("id,v\n");
+    for i in 0..1200 {
+        input.push_str(&format!("{i},x\n"));
+    }
+    let (stdout, code) = run_piped(&["--color", "never"], input.as_bytes());
+    assert_eq!(code, 0);
+    assert!(stdout.contains("× 1,200 rows"), "{stdout}");
+    assert!(stdout.contains("     1,200  0 … 1199"), "{stdout}");
+    // JSON stays bare numbers.
+    let (json, _) = run_piped(&["--json"], input.as_bytes());
+    let v: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["film"]["rows"], 1200);
+}
+
+#[test]
 fn plain_yes_no_is_not_mixed_bool() {
     // Regression: Y and N are the two values of one family, not "mixed forms".
     let v = profile("fixtures/messy/flags.csv");

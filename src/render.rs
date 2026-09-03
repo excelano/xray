@@ -16,6 +16,20 @@ fn human_size(bytes: u64) -> String {
     }
 }
 
+/// A count with thousands separators: 4812 → 4,812. The render only; the JSON
+/// view carries bare numbers.
+fn group(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn delim_name(d: u8) -> String {
     match d {
         b',' => "comma".into(),
@@ -48,7 +62,7 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
     out.push_str(&format!(
         "  {} columns × {} rows       {}       {}\n",
         scan.columns.len(),
-        scan.data_rows,
+        group(scan.data_rows),
         header_desc,
         human_size(scan.bytes),
     ));
@@ -90,11 +104,11 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
             col.header.clone()
         };
         let fill = crate::resolve::fill_pct(col.nonblank, col.total);
-        let distinct = if col.distinct_capped {
-            format!("{}+", col.distinct_count())
-        } else {
-            col.distinct_count().to_string()
-        };
+        let distinct = format!(
+            "{}{}",
+            group(col.distinct_count()),
+            if col.distinct_capped { "+" } else { "" }
+        );
         // A candidate key is useful context, not a problem — surface it here in
         // the reading rather than in the findings damage list.
         let key_eligible = matches!(
