@@ -104,6 +104,9 @@ pub fn to_json(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Valu
         .collect();
 
     let mut root = json!({
+        // Which xray wrote this, so a consumer can tell a profile from an
+        // older build apart from one that knows the newer kinds.
+        "xray": env!("CARGO_PKG_VERSION"),
         "file": name,
         "film": {
             "columns": scan.columns.len(),
