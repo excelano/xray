@@ -160,6 +160,40 @@ fn quoted_commas_do_not_fool_the_delimiter() {
 }
 
 #[test]
+fn an_example_holding_a_comma_is_quoted_in_the_reading() {
+    // Regression: `Acme, Inc., Globex, LLC, Initech` read as five examples
+    // where there were three.
+    let (stdout, _) = run(&["--color", "never", "fixtures/messy/quoted_commas.csv"]);
+    assert!(
+        stdout.contains("\"Acme, Inc.\", \"Globex, LLC\", Initech"),
+        "vendor examples are not quoted:\n{stdout}"
+    );
+    // The JSON view carries the raw value; quoting is a render concern.
+    let v = profile("fixtures/messy/quoted_commas.csv");
+    assert_eq!(column(&v, "B")["examples"][0], "Acme, Inc.");
+}
+
+#[test]
+fn an_embedded_newline_does_not_break_the_reading_table() {
+    // Regression: a quoted cell with a newline printed the newline raw, so one
+    // column took two lines and the table lost its alignment.
+    let (stdout, _) = run(&["--color", "never", "fixtures/messy/multiline.csv"]);
+    assert!(
+        stdout.contains("line one⏎line two, plain"),
+        "newline not flattened:\n{stdout}"
+    );
+    let reading_lines = stdout
+        .lines()
+        .skip_while(|l| !l.starts_with("READING"))
+        .take_while(|l| !l.is_empty())
+        .count();
+    assert_eq!(
+        reading_lines, 4,
+        "READING must be a title, a header, one line per column"
+    );
+}
+
+#[test]
 fn plain_yes_no_is_not_mixed_bool() {
     // Regression: Y and N are the two values of one family, not "mixed forms".
     let v = profile("fixtures/messy/flags.csv");

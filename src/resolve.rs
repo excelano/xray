@@ -91,13 +91,35 @@ fn trim_num(v: f64) -> String {
     }
 }
 
+/// One example value as the human render shows it. A newline inside the value
+/// becomes ⏎, so the reading stays one line per column; a value holding a comma
+/// is quoted, so `Acme, Inc.` cannot be read as two examples. The JSON view
+/// carries the raw value and needs neither.
+pub fn show(value: &str) -> String {
+    let flat = value.replace("\r\n", "⏎").replace(['\r', '\n'], "⏎");
+    if flat.contains(',') {
+        format!("\"{flat}\"")
+    } else {
+        flat
+    }
+}
+
+/// The column's example values, comma-separated for the reading.
+fn examples(col: &Column) -> String {
+    col.examples
+        .iter()
+        .map(|e| show(e))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 pub fn top_frequencies(col: &Column, n: usize) -> String {
     let mut pairs: Vec<(&String, &usize)> = col.freq.iter().collect();
     pairs.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
     pairs
         .iter()
         .take(n)
-        .map(|(v, c)| format!("{} ×{}", v, c))
+        .map(|(v, c)| format!("{} ×{}", show(v), c))
         .collect::<Vec<_>>()
         .join(" · ")
 }
@@ -131,7 +153,7 @@ pub fn resolve(col: &Column) -> Resolved {
     let text = count(col, Kind::Text);
     let numeric = ints + decimals;
 
-    let examples = col.examples.join(", ");
+    let examples = examples(col);
     let num_range = || match (col.num_min, col.num_max) {
         (Some(a), Some(b)) => format!("{} … {}", trim_num(a), trim_num(b)),
         _ => examples.clone(),
@@ -152,7 +174,7 @@ pub fn resolve(col: &Column) -> Resolved {
         return Resolved {
             class: Class::LongId,
             label: "text · long-id".into(),
-            detail: col.examples.join(", "),
+            detail: examples,
             flag: Some("keep as text".into()),
             ..base
         };
