@@ -400,7 +400,8 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
     }
 
     // ---- per column ----
-    let mut protect: Vec<String> = Vec::new();
+    let mut leading_zero: Vec<String> = Vec::new();
+    let mut long_id: Vec<String> = Vec::new();
     let mut trapped = false;
     for (i, col) in scan.columns.iter().enumerate() {
         let r = resolve(col);
@@ -420,7 +421,8 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
                         .map(|f| format!("xled '{addr} s/[$,]//g' {f}")),
                 });
             }
-            Class::LeadingZero | Class::LongId => protect.push(label.clone()),
+            Class::LeadingZero => leading_zero.push(label.clone()),
+            Class::LongId => long_id.push(label.clone()),
             _ => {}
         }
         if r.mixed_nonnumeric > 0 || r.bool_mixed {
@@ -428,13 +430,23 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
         }
     }
 
-    // Collapsed into one line: the instruction is identical for every such
-    // column, and it is the one case where the correct action is to do nothing.
-    if !protect.is_empty() {
+    // Collapsed into one line per reason: the instruction is identical for
+    // every such column, and it is the one case where the correct action is to
+    // do nothing. The two reasons stay apart because a cast damages them
+    // differently — it strips a leading zero, but rounds a 16+-digit ID.
+    if !leading_zero.is_empty() {
         refs.push(Referral {
-            trigger: format!("{} stays text", protect.join(", ")),
+            trigger: format!("{} stays text", leading_zero.join(", ")),
             tool: "xled",
             action: "a numeric cast strips the zeros — cast at math time, not in the file".into(),
+            command: None,
+        });
+    }
+    if !long_id.is_empty() {
+        refs.push(Referral {
+            trigger: format!("{} stays text", long_id.join(", ")),
+            tool: "xled",
+            action: "a numeric cast rounds the digits away — keep it text, never cast it".into(),
             command: None,
         });
     }

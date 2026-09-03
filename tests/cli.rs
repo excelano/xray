@@ -354,6 +354,23 @@ fn referrals_without_an_unambiguous_repair_carry_no_command() {
 }
 
 #[test]
+fn long_id_referral_does_not_talk_about_zeros() {
+    // Regression: leading-zero and long-ID columns shared one "stays text"
+    // line, so an 18-digit ID was told a cast would strip its zeros.
+    let v = profile_with(&["--json", "--refer", "fixtures/messy/big_ids.csv"]);
+    let stays = referrals(&v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains("stays text"))
+        .expect("no long-id referral");
+    let action = stays["action"].as_str().unwrap();
+    assert!(
+        !action.contains("zero"),
+        "long-id action talks about zeros: {action:?}"
+    );
+    assert!(stays["command"].is_null());
+}
+
+#[test]
 fn piped_input_gets_referrals_but_no_commands() {
     let v = profile_piped(&["--json", "--refer"], "fixtures/messy/vendor_spend.csv");
     assert!(
