@@ -121,6 +121,8 @@ xray auto-detects a buried header, sniffs the delimiter (quote-aware), and colou
 
 Input comes from a file argument or from stdin, so xray sits in a pipe like the rest of the family; a piped profile reports its source as `(stdin)` and is otherwise identical to the same bytes read from disk.
 
+The `--json` view is the contract for anything that reads xray programmatically. Its keys, the `class` and `kind` vocabularies, and the exit codes are only ever added to within a major version: a new kind may appear in a minor release, nothing is renamed or removed. The prose fields and the human render may be reworded in any release. Each profile names the version that wrote it, so a reader can tell a kind that is absent because the file is clean from one the build did not know. The full schema is in the skill's [`reference.md`](skills/xray/reference.md).
+
 ## Use it from Claude Code
 
 xray was built for AI coding agents as much as for people, so the repo ships an official [Claude Code](https://docs.claude.com/en/docs/claude-code) skill under [`skills/xray/`](skills/xray/). It teaches an agent the three registers (film, reading, findings), the stringly-typed classification (why leading zeros and long IDs stay text), how to read the ranked findings, and the hard boundary — xray only observes; fixing values is xled's job and querying is xql's — so an agent profiles a file first instead of guessing at it. The binary installs it:

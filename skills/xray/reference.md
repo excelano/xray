@@ -22,7 +22,10 @@ output file, because xray does not mutate.
 | `--refer` | also print the REFERRAL block: which family tool (xled / xql) treats each finding, named by column, with a runnable command where the repair is unambiguous. Off by default — the profile stands on its own — but an agent should always pass it |
 | `--json` | emit the profile as JSON instead of the human render. Always plain (no colour). Stable `class` / `kind` / `column` keys for a machine reader |
 | `--header <ROW>` | set the header row explicitly, 1-based. `0` means the file has no header (row 1 is data). Out of range is an error, not a clamp. Omit to auto-detect a buried header |
+| `--no-header` | the family spelling for `--header 0`; giving both is an error |
+| `-d`, `--delim <CHAR>` | override the sniffed delimiter; `\t` spells tab |
 | `--color <WHEN>` | `auto` (default) colours a terminal and goes plain when piped or read by a program (honours `NO_COLOR`); `always` forces colour; `never` forces plain |
+| `--install-skill` / `--uninstall-skill` | write this skill into `~/.claude/skills/xray/` (or remove it) and exit; safe to re-run |
 | `-V`, `--version` / `-h`, `--help` | standard |
 
 xray exits `0` whether the file is clean or full of findings — it reports, it does not
@@ -38,7 +41,8 @@ options.
 Column count × row count (data rows, header excluded), the header row number and how many
 preamble rows sit above it, byte size, delimiter (quote-aware sniff, not char-counting),
 encoding (`utf-8` or `non-utf-8` — a non-UTF-8 file is decoded lossily so the profile
-still runs), BOM presence, and line endings (`LF` / `CRLF`).
+still runs), BOM presence, and line endings (`LF`, `CRLF`, or `mixed`, counted over every
+record terminator; a newline inside a quoted cell is data and does not count).
 
 ### READING — one row per column
 
@@ -100,6 +104,7 @@ The `class` (the stable JSON value) and its human label:
 | `empty` | `empty` | no non-blank values; a spacer if the header is also blank |
 | `leading_zero` | `text · leading-0` | all-digit values with a significant leading zero — flagged `keep as text` (a cast strips the zeros) |
 | `long_id` | `text · long-id` | an all-digit run of 16+ digits — exceeds exact numeric range, so it stays text and reports null min/max |
+| `scientific` | `text · e-notation` | `1.23E+15`: what Excel makes of a long number on export. It parses as a float, which is the trap — the dropped digits are not in the file. Flagged `digits lost`, null min/max |
 | `currency` | `text · currency` | `$` and thousands-comma money — text until de-currencied; may flag `float-noise` |
 | `bool` | `bool` (or `bool · mixed-repr`, `bool · MIXED`) | boolean-valued; `mixed-repr` when more than one spelling family appears (Y/N vs yes/no vs true/false); `MIXED` when stray non-boolean values (`NA`, `Unknown`) contaminate the column |
 | `int` | `int` (or `int · MIXED`) | integers; `MIXED` when a few non-numeric values (`n/a`, a lone `$5`) contaminate the column |
@@ -116,6 +121,8 @@ render with `!`; structure with `·`.
 
 | kind | Fires when |
 |---|---|
+| `no_data` | the input is empty, or a header with nothing under it. Pre-empts every other finding: with no rows there is nothing else to say |
+| `non_utf8` | bytes that are not valid UTF-8 (shown as �); usually a Windows-1252 export — transcode before anything reads it |
 | `buried_header` | a preamble/title block sits above the real header row |
 | `ragged_row` | a row's field count differs from the table width (usually a stray comma in an unquoted cell) |
 | `total_row` | a pre-aggregated summary line (blank label column, an aggregated value) — not data |
@@ -126,6 +133,7 @@ render with `!`; structure with `·`.
 |---|---|
 | `leading_zero` | leading-zero text — a numeric cast strips the zeros |
 | `long_id` | a 16+-digit numeric ID — exceeds exact number range, keep as text |
+| `scientific_notation` | values in E-notation — Excel's export form for a long number; an ID here is unrecoverable |
 | `currency_text` | `$`/comma currency (optionally plus float-precision noise) — de-currency before math |
 | `mixed_type` | a numeric-dominant column with stray non-numeric values (`num()` skips them), or a boolean-dominant column with stray non-boolean sentinels |
 | `mixed_bool` | a boolean column mixing spelling families — normalize before logic |
@@ -134,6 +142,8 @@ render with `!`; structure with `·`.
 
 | kind | Fires when |
 |---|---|
+| `bom` | a UTF-8 byte-order mark before the header (row-level); xray strips it, a naïve reader glues U+FEFF onto column A's name |
+| `mixed_line_endings` | some records end CRLF and some LF (row-level); a line-based tool sees a stray carriage return on some rows |
 | `empty_column` | a named column that is entirely empty |
 | `spacer_column` | a blank-header column that is entirely empty |
 | `constant_column` | one value repeated across every non-blank row |
@@ -148,10 +158,11 @@ READING as `· unique key`, not as a finding.
 
 ## The `--json` schema
 
-Top-level keys: `file`, `film`, `reading`, `findings`, `verdict` (and `referral` only
-with `--refer`).
+Top-level keys: `xray` (the version that wrote the profile), `file`, `film`, `reading`,
+`findings`, `verdict` (and `referral` only with `--refer`).
 
 ```
+xray:    "0.5.0"
 film:    { columns, rows, bytes, delimiter, encoding, bom, line_endings,
            header_row, preamble, ragged_rows }
 reading: [ { letter, header, type, class, fill_pct, nonblank, total, distinct,
@@ -175,6 +186,17 @@ file. `column` is the column letter
 a finding is scoped to, or `null` for a row-level (correctness) finding. `min`/`max` are
 `null` for any non-numeric class (including `long_id`, which is numeric-looking but kept
 as text). `top` is populated only for the `categorical` class.
+
+## What stays stable
+
+The JSON keys above, the `class` and `kind` vocabularies, the `group` and `severity`
+values, and the three exit codes are the contract. Within a major version they are only
+ever added to: a new class or kind may appear in a minor release, and nothing is renamed
+or removed. The prose fields — `type`, `detail`, `subject`, `summary`, and the whole human
+render — may be reworded in any release, which is why a machine reader branches on the
+stable values and not on them. `xray` at the root says which version wrote the profile,
+so a reader can tell a kind that is absent because the file is clean from one the build
+did not know.
 
 ## What xray does not do
 

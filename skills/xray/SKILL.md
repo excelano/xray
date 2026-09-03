@@ -93,10 +93,11 @@ as text` flag, not as a number. A column whose values are all distinct and cover
 row is tagged `· unique key` — useful context, not a problem.
 
 **FINDINGS** — the ranked problem list, most severe first, in three groups:
-`correctness` (the data is wrong: ragged rows, pre-aggregated total rows, a buried
-header) → `type safety` (a value will be corrupted by a naïve cast: leading-zero text,
-16+-digit IDs, currency text, mixed types, mixed boolean spellings) → `structure` (shape
-smells: empty/spacer columns, constant columns, duplicate keys, sparse columns, duplicate
+`correctness` (the data is wrong: no data rows, a non-UTF-8 file, ragged rows,
+pre-aggregated total rows, a buried header) → `type safety` (a value will be corrupted by
+a naïve cast: leading-zero text, 16+-digit IDs, E-notation, currency text, mixed types,
+mixed boolean spellings) → `structure` (shape smells: a BOM, mixed line endings,
+empty/spacer columns, constant columns, duplicate keys, sparse columns, duplicate
 headers). Correctness and type-safety items are marked `!`; structure notes are marked
 `·`. A clean file prints `FINDINGS  (0)   clean — nothing flagged`.
 
@@ -136,6 +137,9 @@ that is exactly the discipline xled and xql rely on. Two consequences to interna
 - **Long all-digit IDs stay text.** A run of 16+ digits (Snowflake/BIGINT-style) is
   `text · long-id`: it exceeds exact numeric range, so xray refuses to treat it as a
   number and reports its min/max as null. Keep it as text.
+- **E-notation is lost digits.** `1.23E+15` is what Excel makes of a long number on
+  export; it parses as a float, which is the trap. xray reads it as `text · e-notation`
+  and flags `digits lost` — if it was an ID, the file no longer holds it.
 
 Currency (`$1,200.00`) is reported as `text · currency`, not a number — the `$` and
 thousands commas make it a string until xled strips them. When xray flags float-precision
