@@ -112,6 +112,10 @@ pub struct Column {
     pub examples: Vec<String>,
     pub bool_reprs: Vec<String>,
     pub float_noise: bool,
+    /// What made the currency cells currency: a `$` sign, thousands commas, or
+    /// both. The finding names what it saw rather than assuming both.
+    pub currency_symbol: bool,
+    pub currency_grouping: bool,
 }
 
 impl Column {
@@ -132,6 +136,8 @@ impl Column {
             examples: Vec::new(),
             bool_reprs: Vec::new(),
             float_noise: false,
+            currency_symbol: false,
+            currency_grouping: false,
         }
     }
 
@@ -185,6 +191,8 @@ impl Column {
                 }
             }
             Kind::Currency => {
+                self.currency_symbol |= trimmed.starts_with('$');
+                self.currency_grouping |= trimmed.contains(',');
                 let body: String = trimmed
                     .trim_start_matches('$')
                     .chars()

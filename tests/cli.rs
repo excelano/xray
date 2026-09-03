@@ -209,6 +209,32 @@ fn a_named_empty_column_is_not_called_a_spacer() {
 }
 
 #[test]
+fn the_currency_finding_names_what_it_saw() {
+    // Regression: every currency finding said "$ and thousands commas", even
+    // for a column that never carried a $.
+    fn currency_detail(path: &str) -> String {
+        let v = profile(path);
+        v["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["kind"] == "currency_text")
+            .unwrap_or_else(|| panic!("no currency finding in {path}"))["detail"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+    let both = currency_detail("fixtures/messy/vendor_spend.csv");
+    assert!(both.starts_with("$ and thousands commas"), "{both:?}");
+    let commas_only = currency_detail("fixtures/messy/quoted_commas.csv");
+    assert!(
+        commas_only.starts_with("thousands commas"),
+        "{commas_only:?}"
+    );
+    assert!(!commas_only.contains('$'), "{commas_only:?}");
+}
+
+#[test]
 fn plain_yes_no_is_not_mixed_bool() {
     // Regression: Y and N are the two values of one family, not "mixed forms".
     let v = profile("fixtures/messy/flags.csv");

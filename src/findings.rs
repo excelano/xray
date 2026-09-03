@@ -183,6 +183,11 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                 ),
             }),
             Class::Currency => {
+                let seen = match (col.currency_symbol, col.currency_grouping) {
+                    (true, true) => "$ and thousands commas",
+                    (true, false) => "a $ sign",
+                    _ => "thousands commas",
+                };
                 let noise = if r.float_noise {
                     " plus float-precision noise"
                 } else {
@@ -193,7 +198,7 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                     kind: "currency_text",
                     column: at.clone(),
                     subject: format!("{name} is currency text, not a number"),
-                    detail: format!("$ and thousands commas{noise}; de-currency before math"),
+                    detail: format!("{seen}{noise}; de-currency before math"),
                 });
             }
             _ => {}
