@@ -24,6 +24,7 @@ pub enum Class {
     Empty,
     LeadingZero,
     LongId,
+    Scientific,
     Currency,
     Bool,
     Int,
@@ -39,6 +40,7 @@ impl Class {
             Class::Empty => "empty",
             Class::LeadingZero => "leading_zero",
             Class::LongId => "long_id",
+            Class::Scientific => "scientific",
             Class::Currency => "currency",
             Class::Bool => "bool",
             Class::Int => "int",
@@ -170,6 +172,7 @@ pub fn resolve(col: &Column) -> Resolved {
 
     let leading = count(col, Kind::LeadingZero);
     let longid = count(col, Kind::LongId);
+    let scientific = count(col, Kind::Scientific);
     let ints = count(col, Kind::Int);
     let decimals = count(col, Kind::Decimal);
     let currency = count(col, Kind::Currency);
@@ -200,6 +203,17 @@ pub fn resolve(col: &Column) -> Resolved {
             label: "text · long-id".into(),
             detail: examples,
             flag: Some("keep as text".into()),
+            ..base
+        };
+    }
+    // E-notation is what Excel makes of a long number on export. It parses as a
+    // float, which is the trap: the digits it dropped are not in this file.
+    if scientific > 0 && scientific >= numeric && scientific >= text {
+        return Resolved {
+            class: Class::Scientific,
+            label: "text · e-notation".into(),
+            detail: examples,
+            flag: Some("digits lost".into()),
             ..base
         };
     }

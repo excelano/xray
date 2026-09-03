@@ -19,6 +19,9 @@ pub enum Kind {
     LeadingZero,
     LongId,
     Decimal,
+    /// E-notation, `1.23E+15`: how Excel writes a long number on export, with
+    /// the trailing digits gone.
+    Scientific,
     Currency,
     Bool,
     Text,
@@ -58,7 +61,22 @@ pub fn classify(raw: &str) -> Kind {
     if is_plain_decimal(body) {
         return Kind::Decimal;
     }
+    if is_scientific(body) {
+        return Kind::Scientific;
+    }
     Kind::Text
+}
+
+/// `1.23E+15`, `2.5e3`, `1e-7`: a plain decimal mantissa, an `e`, an optionally
+/// signed all-digit exponent.
+fn is_scientific(body: &str) -> bool {
+    let Some((mantissa, exponent)) = body.split_once(['e', 'E']) else {
+        return false;
+    };
+    let exponent = exponent.strip_prefix(['+', '-']).unwrap_or(exponent);
+    is_plain_decimal(mantissa)
+        && !exponent.is_empty()
+        && exponent.bytes().all(|b| b.is_ascii_digit())
 }
 
 fn looks_like_currency(s: &str) -> bool {

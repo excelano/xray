@@ -222,6 +222,16 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                     r.detail
                 ),
             }),
+            Class::Scientific => out.push(Finding {
+                group: Group::TypeSafety,
+                kind: "scientific_notation",
+                column: at.clone(),
+                subject: format!("{name} is in E-notation"),
+                detail: format!(
+                    "{}; Excel writes a long number this way on export and the trailing digits are gone — an ID here is unrecoverable",
+                    r.detail
+                ),
+            }),
             Class::Currency => {
                 let seen = match (col.currency_symbol, col.currency_grouping) {
                     (true, true) => "$ and thousands commas",

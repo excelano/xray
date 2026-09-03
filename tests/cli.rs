@@ -412,6 +412,20 @@ fn a_bom_is_a_structure_note() {
 }
 
 #[test]
+fn e_notation_is_flagged_as_lost_digits_not_read_as_text() {
+    // 1.23E+15 is what Excel makes of a 16-digit ID on export. It parses as a
+    // float, which is the trap: the digits it dropped are not in the file.
+    let v = profile("fixtures/messy/scientific.csv");
+    let sku = column(&v, "A");
+    assert_eq!(sku["class"], "scientific");
+    assert!(sku["min"].is_null(), "e-notation must not pass through f64");
+    assert_eq!(sku["candidate_key"], false);
+    assert_eq!(kinds(&v), ["scientific_notation"]);
+    // A plain decimal column beside it is untouched.
+    assert_eq!(column(&v, "B")["class"], "decimal");
+}
+
+#[test]
 fn header_past_end_is_an_error_not_a_wrong_answer() {
     let (_, code) = run(&["--header", "99", "fixtures/clean/employees.csv"]);
     assert_ne!(code, 0, "--header past the last row should fail");
