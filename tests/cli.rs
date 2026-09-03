@@ -194,6 +194,21 @@ fn an_embedded_newline_does_not_break_the_reading_table() {
 }
 
 #[test]
+fn a_named_empty_column_is_not_called_a_spacer() {
+    // Regression: the reading said "spacer column" for every empty column,
+    // while the finding correctly kept "spacer" for the blank-header case.
+    let v = profile("fixtures/messy/empty_named.csv");
+    assert_eq!(column(&v, "B")["class"], "empty");
+    assert!(kinds(&v).contains(&"empty_column".to_string()));
+    assert!(!kinds(&v).contains(&"spacer_column".to_string()));
+    let (stdout, _) = run(&["--color", "never", "fixtures/messy/empty_named.csv"]);
+    assert!(
+        !stdout.contains("spacer"),
+        "a named column must not read as a spacer:\n{stdout}"
+    );
+}
+
+#[test]
 fn plain_yes_no_is_not_mixed_bool() {
     // Regression: Y and N are the two values of one family, not "mixed forms".
     let v = profile("fixtures/messy/flags.csv");

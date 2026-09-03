@@ -135,11 +135,18 @@ pub fn resolve(col: &Column) -> Resolved {
         float_noise: col.float_noise,
     };
 
+    // A spacer is an empty column with no name either; a named column that is
+    // empty is a column somebody meant to fill.
     if col.nonblank == 0 {
         return Resolved {
             class: Class::Empty,
             label: "empty".into(),
-            detail: "spacer column — entirely empty".into(),
+            detail: if col.header.trim().is_empty() {
+                "spacer column — entirely empty"
+            } else {
+                "entirely empty"
+            }
+            .into(),
             ..base
         };
     }
