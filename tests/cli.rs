@@ -168,6 +168,11 @@ fn an_example_holding_a_comma_is_quoted_in_the_reading() {
         stdout.contains("\"Acme, Inc.\", \"Globex, LLC\", Initech"),
         "vendor examples are not quoted:\n{stdout}"
     );
+    // A thousands comma is grouping, not a separator: money stays bare.
+    assert!(
+        stdout.contains("1,200.00, 12,000.00, 3,300.00"),
+        "grouped numbers must not be quoted:\n{stdout}"
+    );
     // The JSON view carries the raw value; quoting is a render concern.
     let v = profile("fixtures/messy/quoted_commas.csv");
     assert_eq!(column(&v, "B")["examples"][0], "Acme, Inc.");

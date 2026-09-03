@@ -104,11 +104,17 @@ fn trim_num(v: f64) -> String {
 
 /// One example value as the human render shows it. A newline inside the value
 /// becomes ⏎, so the reading stays one line per column; a value holding a comma
-/// is quoted, so `Acme, Inc.` cannot be read as two examples. The JSON view
-/// carries the raw value and needs neither.
+/// is quoted, so `Acme, Inc.` cannot be read as two examples. A comma followed
+/// by a digit is thousands grouping, not a separator, so `$1,200.00` stays
+/// bare. The JSON view carries the raw value and needs neither.
 pub fn show(value: &str) -> String {
     let flat = value.replace("\r\n", "⏎").replace(['\r', '\n'], "⏎");
-    if flat.contains(',') {
+    let separator_like = flat
+        .as_bytes()
+        .windows(2)
+        .any(|w| w[0] == b',' && !w[1].is_ascii_digit())
+        || flat.ends_with(',');
+    if separator_like {
         format!("\"{flat}\"")
     } else {
         flat
