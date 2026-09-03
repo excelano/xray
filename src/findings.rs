@@ -93,6 +93,35 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
     let width = scan.columns.len();
 
     // ---- correctness (row-level, not column-scoped) ----
+    // Nothing under the header is the one finding that pre-empts the rest: with
+    // no rows every column is empty, and a column-by-column list of that would
+    // bury the only fact that matters.
+    if scan.data_rows == 0 {
+        out.push(Finding {
+            group: Group::Correctness,
+            kind: "no_data",
+            column: None,
+            subject: "no data rows".into(),
+            detail: if scan.columns.is_empty() {
+                "the input is empty".into()
+            } else {
+                format!(
+                    "a header of {width} column{} and nothing under it",
+                    if width == 1 { "" } else { "s" }
+                )
+            },
+        });
+        return out;
+    }
+    if !scan.utf8 {
+        out.push(Finding {
+            group: Group::Correctness,
+            kind: "non_utf8",
+            column: None,
+            subject: "not UTF-8".into(),
+            detail: "bytes that are not valid UTF-8, shown here as �; likely a Windows-1252 export — transcode before anything reads it".into(),
+        });
+    }
     if scan.preamble > 0 {
         out.push(Finding {
             group: Group::Correctness,
@@ -131,6 +160,17 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
             column: None,
             subject: format!("total row {row}"),
             detail: format!("pre-aggregated \"{sample}\"; a summary line, not data"),
+        });
+    }
+
+    // ---- structure (row-level) ----
+    if scan.bom {
+        out.push(Finding {
+            group: Group::Structure,
+            kind: "bom",
+            column: None,
+            subject: "UTF-8 BOM".into(),
+            detail: "three invisible bytes before the header; a reader that does not strip them glues U+FEFF onto column A's name".into(),
         });
     }
 

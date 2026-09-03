@@ -375,6 +375,43 @@ fn an_unknown_flag_is_bad_invocation() {
 }
 
 #[test]
+fn nothing_under_the_header_is_a_finding_not_a_clean_bill() {
+    // An empty input and a header-only file both used to report "clean", and
+    // the header-only case listed every column as empty. One finding, and it
+    // pre-empts the per-column noise.
+    let (json, code) = run_piped(&["--json"], b"");
+    assert_eq!(code, 0);
+    let empty: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(kinds(&empty), ["no_data"]);
+    assert_eq!(empty["verdict"]["clean"], false);
+
+    let (json, _) = run_piped(&["--json"], b"a,b,c\n");
+    let header_only: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(kinds(&header_only), ["no_data"]);
+    assert_eq!(header_only["film"]["columns"], 3);
+}
+
+#[test]
+fn a_non_utf8_file_is_flagged_not_merely_noted_in_the_film() {
+    let v = profile("fixtures/messy/latin1.csv");
+    assert_eq!(v["film"]["encoding"], "non-utf-8");
+    assert_eq!(kinds(&v), ["non_utf8"]);
+    assert_eq!(v["verdict"]["worst"], "correctness");
+    // The profile still runs: the damaged cells are read, not skipped.
+    assert_eq!(column(&v, "B")["nonblank"], 3);
+}
+
+#[test]
+fn a_bom_is_a_structure_note() {
+    let v = profile("fixtures/messy/bom.csv");
+    assert_eq!(v["film"]["bom"], true);
+    assert_eq!(v["film"]["encoding"], "utf-8");
+    assert_eq!(kinds(&v), ["bom"]);
+    // The BOM is stripped before the header is read.
+    assert_eq!(column(&v, "A")["header"], "id");
+}
+
+#[test]
 fn header_past_end_is_an_error_not_a_wrong_answer() {
     let (_, code) = run(&["--header", "99", "fixtures/clean/employees.csv"]);
     assert_ne!(code, 0, "--header past the last row should fail");
