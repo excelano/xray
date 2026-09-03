@@ -305,6 +305,71 @@ fn long_ids_stay_text_and_do_not_corrupt_stats() {
 }
 
 #[test]
+fn schema_smells_each_fire_once_on_the_column_they_describe() {
+    // The four structure kinds that shipped without a test. Each is pinned to
+    // its column so a heuristic drifting onto a neighbour fails loudly.
+    let v = profile("fixtures/messy/schema_smells.csv");
+    let at = |kind: &str| -> Vec<&str> {
+        v["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["kind"] == kind)
+            .map(|f| f["column"].as_str().unwrap())
+            .collect()
+    };
+    // 1010 appears twice in an id-like column that is otherwise unique.
+    assert_eq!(at("duplicate_key"), ["A"]);
+    // Column B repeats column A's header.
+    assert_eq!(at("duplicate_header"), ["B"]);
+    // Every status is "open".
+    assert_eq!(at("constant_column"), ["C"]);
+    // One note in eleven rows.
+    assert_eq!(at("sparse_column"), ["D"]);
+    assert_eq!(v["verdict"]["worst"], "structure");
+}
+
+#[test]
+fn distinct_counts_saturate_at_the_cardinality_cap() {
+    // 10,001 distinct values: the count stops at the cap and says so, rather
+    // than growing a hash set without bound on a wide, deep file.
+    let mut input = String::from("id\n");
+    for i in 0..10_001 {
+        input.push_str(&format!("{i}\n"));
+    }
+    let (json, code) = run_piped(&["--json"], input.as_bytes());
+    assert_eq!(code, 0);
+    let v: Value = serde_json::from_str(&json).unwrap();
+    let id = column(&v, "A");
+    assert_eq!(id["distinct"], 10_000);
+    assert_eq!(id["distinct_capped"], true);
+    // A capped column cannot be called a key: it may or may not be unique.
+    assert_eq!(id["candidate_key"], false);
+    let (stdout, _) = run_piped(&["--color", "never"], input.as_bytes());
+    assert!(stdout.contains("10,000+"), "{stdout}");
+}
+
+#[test]
+fn a_missing_file_is_bad_input_and_says_which_file() {
+    let out = Command::new(env!("CARGO_BIN_EXE_xray"))
+        .arg("fixtures/no_such_file.csv")
+        .output()
+        .expect("failed to run xray");
+    assert_eq!(out.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.starts_with("xray: fixtures/no_such_file.csv: "),
+        "diagnostic must carry the tool prefix and the path: {stderr:?}"
+    );
+}
+
+#[test]
+fn an_unknown_flag_is_bad_invocation() {
+    let (_, code) = run(&["--bogus", "fixtures/clean/employees.csv"]);
+    assert_eq!(code, 2);
+}
+
+#[test]
 fn header_past_end_is_an_error_not_a_wrong_answer() {
     let (_, code) = run(&["--header", "99", "fixtures/clean/employees.csv"]);
     assert_ne!(code, 0, "--header past the last row should fail");
