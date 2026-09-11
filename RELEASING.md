@@ -9,11 +9,11 @@ not of its siblings.
 | | |
 |---|---|
 | Loop | cargo-dist |
-| Version lives in | `version` in `Cargo.toml` |
+| Version lives in | `Cargo.toml` |
 | `apt-ship` argument | `xray` |
-| crate | `x-ray` |
-| winget package | `Excelano.xray` |
-| Windows asset | `x-ray-x86_64-pc-windows-msvc.zip` |
+| Packages per release | 2, amd64 arm64 |
+| crates | `x-ray` |
+| winget package | `Excelano.xray` — `x-ray-x86_64-pc-windows-msvc.zip` |
 
 **The crate publishes as `x-ray`; everything else is `xray`.** The bare `xray`
 name is a dormant 2018 crate, so crates.io is the lone hyphenated coordinate.
