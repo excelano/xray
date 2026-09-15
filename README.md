@@ -89,20 +89,6 @@ winget install Excelano.xray
 xray --install-skill
 ```
 
-Or run the standalone installer in PowerShell:
-
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://github.com/excelano/xray/releases/latest/download/x-ray-installer.ps1 | iex"
-```
-
-### Curl (any Linux or macOS)
-
-```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/excelano/xray/main/install.sh | sh
-```
-
-To remove it: swap `install.sh` for `uninstall.sh` in that line.
-
 ## Usage
 
 ```sh
@@ -133,4 +119,4 @@ xray --install-skill
 
 That writes `~/.claude/skills/xray/` and stamps in the version it came from, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `xray --uninstall-skill` removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
-The skill is compiled into the binary, so this works the same however you installed xray — apt, Homebrew, cargo, the curl one-liner, or a build from source.
+The skill is compiled into the binary, so this works the same however you installed xray — apt, Homebrew, cargo, or a build from source.
