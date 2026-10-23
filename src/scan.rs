@@ -39,13 +39,15 @@ pub enum Kind {
 pub enum DateForm {
     /// `2026-10-23`, optionally followed by a time.
     Iso,
-    /// `23/10/2026`, `1-2-2026`, `5.3.2026`, `23/10/26`: two leading parts in
-    /// either order, the separator, and the year's digit count.
+    /// `23/10/2026`, `1-2-2026`, `5.3.2026`, `23/10/26`, `10/23/2026 2:30 PM`:
+    /// two leading parts in either order, the separator, the year's digit
+    /// count, and whether a time follows.
     Numeric {
         first: u8,
         second: u8,
         sep: u8,
         year_digits: u8,
+        timed: bool,
     },
 }
 
@@ -57,18 +59,19 @@ fn small_number(part: &str) -> Option<u8> {
     }
 }
 
+/// Whether `t` starts like a clock time: an hour of one or two digits, a colon.
+fn is_time(t: &str) -> bool {
+    t.split_once(':')
+        .is_some_and(|(hour, _)| small_number(hour).is_some())
+}
+
 /// Read `s` (already trimmed) as a date, if it is one of the two forms.
 pub fn date_form(s: &str) -> Option<DateForm> {
     let b = s.as_bytes();
     if b.len() >= 10 && b[4] == b'-' && b[7] == b'-' {
         let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
         let rest = &b[10..];
-        let time_follows = rest.is_empty()
-            || (matches!(rest[0], b'T' | b' ')
-                && rest.len() >= 4
-                && rest[1].is_ascii_digit()
-                && rest[2].is_ascii_digit()
-                && rest[3] == b':');
+        let time_follows = rest.is_empty() || (matches!(rest[0], b'T' | b' ') && is_time(&s[11..]));
         if digits(0..4) && digits(5..7) && digits(8..10) && time_follows {
             let month: u8 = s[5..7].parse().ok()?;
             let day: u8 = s[8..10].parse().ok()?;
@@ -76,7 +79,15 @@ pub fn date_form(s: &str) -> Option<DateForm> {
         }
         return None;
     }
-    let sep = *b.iter().find(|c| matches!(c, b'/' | b'-' | b'.'))?;
+    let (s, timed) = match s.split_once(' ') {
+        Some((date, time)) if is_time(time.trim_start()) => (date, true),
+        Some(_) => return None,
+        None => (s, false),
+    };
+    let sep = *s
+        .as_bytes()
+        .iter()
+        .find(|c| matches!(c, b'/' | b'-' | b'.'))?;
     let parts: Vec<&str> = s.split(sep as char).collect();
     let [first, second, year] = parts[..] else {
         return None;
@@ -94,6 +105,7 @@ pub fn date_form(s: &str) -> Option<DateForm> {
         second,
         sep,
         year_digits,
+        timed,
     })
 }
 
@@ -226,6 +238,8 @@ pub struct DateTally {
     pub month_first: Option<String>,
     pub separators: Vec<u8>,
     pub year_digits: Vec<u8>,
+    /// Some day/month cell carries a time after the date.
+    pub timed: bool,
     pub example: Option<String>,
 }
 
@@ -316,8 +330,10 @@ impl Column {
                         second,
                         sep,
                         year_digits,
+                        timed,
                     }) => {
                         d.numeric += 1;
+                        d.timed |= timed;
                         if first > 12 {
                             d.day_first.get_or_insert_with(|| trimmed.to_string());
                         }
@@ -758,10 +774,17 @@ mod tests {
                 first: 23,
                 second: 10,
                 sep: b'/',
-                year_digits: 2
+                year_digits: 2,
+                timed: false
             })
         );
         assert!(date_form("5.3.2026").is_some());
+        assert!(date_form("2026-10-23 9:30").is_some());
+        assert!(matches!(
+            date_form("10/23/2026 2:30 PM"),
+            Some(DateForm::Numeric { timed: true, .. })
+        ));
+        assert_eq!(date_form("10/23/2026 later"), None);
         assert!(date_form("1-2-2026").is_some());
         // Neither part can be a month.
         assert_eq!(date_form("23/24/2026"), None);

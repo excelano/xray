@@ -879,10 +879,73 @@ fn a_proven_date_layout_and_padding_get_commands_and_the_rest_do_not() {
     );
     assert_eq!(
         command_for("padded"),
-        format!("xled '[Client] = trim([Client])\n[Status] = trim([Status])' {path}")
+        format!("xled '[Client] s/^\\s+|\\s+$//g\n[Status] s/^\\s+|\\s+$//g' {path}")
     );
     // Which layout or which spelling is right is not xray's to decide.
     for needle in ["Renewed (D)", "Due (E)", "Logged (F)", "case variants"] {
         assert!(command_for(needle).is_null(), "{needle} carries a command");
     }
+}
+
+fn command_for(v: &Value, needle: &str) -> Value {
+    referrals(v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains(needle))
+        .unwrap_or_else(|| panic!("no referral for {needle}"))["command"]
+        .clone()
+}
+
+#[test]
+fn a_column_without_a_usable_name_gets_no_expression_command() {
+    // xled takes a bare letter as an address but not inside an expression, so
+    // the date conversion has no command; the trim is an s/// and still runs.
+    let dir = std::env::temp_dir().join(format!("xray-{}-noname", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("nh.csv");
+    std::fs::write(&file, "23/10/2026, x\n1/2/2026,y\n").unwrap();
+    let path = file.to_str().unwrap();
+    let v = profile_with(&["--json", "--refer", "--header", "0", path]);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(command_for(&v, "D/M/Y").is_null());
+    assert_eq!(
+        command_for(&v, "padded"),
+        format!(r"xled --no-header 'B s/^\s+|\s+$//g' {path}")
+    );
+}
+
+#[test]
+fn case_variants_skip_case_sensitive_keys() {
+    let v = refer_on(
+        "ids.csv",
+        "AccountId,Ref,Status\n001A000001abcDE,a1B,Open\n001A000001ABCde,A1b,open\n",
+    );
+    let cased: Vec<&Value> = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["kind"] == "case_variant")
+        .collect();
+    assert_eq!(cased.len(), 1, "findings {cased:?}");
+    assert_eq!(cased[0]["column"], "C");
+}
+
+#[test]
+fn a_stray_value_in_a_date_column_is_not_a_trapped_number() {
+    let v = refer_on("when.csv", "Id,When\n1,2026-10-23\n2,2026-10-24\n3,N/A\n");
+    assert!(kinds(&v).contains(&"mixed_type".to_string()));
+    assert!(!referrals(&v)
+        .iter()
+        .any(|r| r["trigger"] == "numbers trapped as text"));
+}
+
+#[test]
+fn a_dated_time_reads_as_a_date_but_gets_no_command() {
+    // date() under a plain date format would skip the cells with a time.
+    let v = refer_on(
+        "logged.csv",
+        "Logged\n10/23/2026 14:30\n10/24/2026 2:30 PM\n10/25/2026\n",
+    );
+    assert_eq!(column(&v, "A")["class"], "date");
+    assert!(kinds(&v).contains(&"non_iso_date".to_string()));
+    assert!(command_for(&v, "M/D/Y").is_null());
 }

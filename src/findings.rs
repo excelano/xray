@@ -119,14 +119,22 @@ fn quoted(value: &str) -> String {
     )
 }
 
-/// Groups of values that differ only in case, each in first-seen-spelling
-/// order, most frequent group first. Padding is set aside first, so `Acme `
-/// and `acme` count as a case variant and not as two findings' worth.
+/// Groups of values that differ only in case, most frequent spelling first,
+/// most frequent group first. Padding is set aside first, so `Acme ` and
+/// `acme` count as a case variant. An ID column, and any value holding a
+/// digit, is left out: `001A000001abcDE` and `001A000001ABCde` are two
+/// case-sensitive keys, not one spelled twice.
 fn case_variants(col: &Column) -> Vec<Vec<String>> {
+    if is_id_header(&col.header) {
+        return Vec::new();
+    }
     let mut groups: std::collections::HashMap<String, Vec<(&str, usize)>> =
         std::collections::HashMap::new();
     for (value, n) in &col.freq {
         let v = value.trim();
+        if v.bytes().any(|b| b.is_ascii_digit()) {
+            continue;
+        }
         let forms = groups.entry(v.to_lowercase()).or_default();
         match forms.iter_mut().find(|(f, _)| *f == v) {
             Some((_, total)) => *total += n,
@@ -150,9 +158,12 @@ fn case_variants(col: &Column) -> Vec<Vec<String>> {
 }
 
 /// The xled format a date column converts under, when one format reads every
-/// non-ISO cell: a proven order, one separator, one year width.
+/// non-ISO cell: a proven order, one separator, one year width, no times.
 fn date_format(col: &Column) -> Option<String> {
     let d = &col.dates;
+    if d.timed {
+        return None;
+    }
     let (a, b) = match date_layout(col) {
         DateLayout::DayFirst => ("D", "M"),
         DateLayout::MonthFirst => ("M", "D"),
@@ -717,8 +728,10 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
                     ),
                 };
                 if let Some(trigger) = trigger {
-                    let script =
-                        date_format(col).map(|fmt| format!("{addr} = date({addr}, \"{fmt}\")"));
+                    // An expression takes a column only by bracketed name.
+                    let script = date_format(col)
+                        .filter(|_| addr.starts_with('['))
+                        .map(|fmt| format!("{addr} = date({addr}, \"{fmt}\")"));
                     refs.push(Referral {
                         trigger,
                         tool: "xled",
@@ -738,7 +751,7 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
         if matches!(r.class, Class::Text | Class::Categorical) && !case_variants(col).is_empty() {
             cased.push(label.clone());
         }
-        if r.mixed > 0 || r.bool_mixed {
+        if (r.mixed > 0 && r.class != Class::Date) || r.bool_mixed {
             trapped = true;
         }
     }
@@ -769,7 +782,7 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
         let labels: Vec<&str> = padded.iter().map(|(l, _)| l.as_str()).collect();
         let script: Vec<String> = padded
             .iter()
-            .map(|(_, a)| format!("{a} = trim({a})"))
+            .map(|(_, a)| format!(r"{a} s/^\s+|\s+$//g"))
             .collect();
         let script: Vec<&str> = script.iter().map(String::as_str).collect();
         refs.push(Referral {

@@ -78,10 +78,10 @@ is nothing to hand off.
 | pre-aggregated row *n* | xled | crop past the summary line before aggregating | — |
 | *n* ragged rows | xled | repair the stray delimiters; later addresses depend on the width | — |
 | *col* is currency text | xled | strip the formatting before any math | `xled '[col] s/[$,]//g' file.csv` |
-| *col* is D/M/Y (or M/D/Y) dates | xled | convert to ISO with `date()` under that layout | `xled '[col] = date([col], "D/M/YYYY")' file.csv`, when one separator and one year width read every cell |
+| *col* is D/M/Y (or M/D/Y) dates | xled | convert to ISO with `date()` under that layout | `xled '[col] = date([col], "D/M/YYYY")' file.csv`, when one separator and one year width read every cell, none carries a time, and the column has a name |
 | *col* reads D/M or M/D | xled | confirm the layout at the source, then convert with `date()` | — |
 | *col* mixes date layouts | xled | separate the layouts first; `date()` reads one at a time | — |
-| *cols* padded | xled | trim before any join or comparison | `xled '[col] = trim([col])' file.csv`, one line per padded column |
+| *cols* padded | xled | trim before any join or comparison | `xled '[col] s/^\s+\|\s+$//g' file.csv`, one line per padded column |
 | *cols* case variants | xled | choose the spelling, then normalize | — |
 | *cols* stay text | xled | a numeric cast strips the zeros — cast at math time, not in the file | — |
 | numbers trapped as text | xql | filter or aggregate once those columns are clean | — |
@@ -103,8 +103,10 @@ last row and discards only the preamble; a total row below the table is left for
 referral. A script of more than one line spans lines inside its quotes (⏎ above), since
 xled does not take `;` between commands.
 
-Column addressing is the bracketed header name, falling back to the spreadsheet letter
-when the header is blank or contains a `]`. A quote in the name is escaped for the shell.
+Column addressing is the bracketed header name, spelled as the file has it, falling back
+to the spreadsheet letter when the header is blank or holds a `]` or a line break. xled
+takes a letter as an address but not inside an expression, so a command that needs one
+(the date conversion) is omitted for such a column. A quote in the name is escaped for the shell.
 The file path is shell-quoted when it needs it, and the command is omitted entirely for
 piped stdin, where there is no file to name.
 
@@ -121,7 +123,7 @@ The `class` (the stable JSON value) and its human label:
 | `scientific` | `text · e-notation` | `1.23E+15`: what Excel makes of a long number on export. It parses as a float, which is the trap — the dropped digits are not in the file. Flagged `digits lost`, null min/max |
 | `currency` | `text · currency` | `$` and thousands-comma money — text until de-currencied; may flag `float-noise` |
 | `bool` | `bool` (or `bool · mixed-repr`, `bool · MIXED`) | boolean-valued; `mixed-repr` when more than one spelling family appears (Y/N vs yes/no vs true/false); `MIXED` when stray non-boolean values (`NA`, `Unknown`) contaminate the column |
-| `date` | `date` (or `date · D/M/Y`, `date · M/D/Y`, `date · D/M or M/D`, `date · mixed layouts`, plus `· MIXED`) | ISO dates (`2026-10-23`, optionally with a time), or day/month dates with a trailing year (`23/10/2026`, `5.3.2026`, `1-2-2026`; a two-digit year only after `/`). The layout comes from the cells: a first part over 12 proves day-first, a second part over 12 proves month-first, neither leaves it ambiguous. `MIXED` when stray non-date values contaminate the column |
+| `date` | `date` (or `date · D/M/Y`, `date · M/D/Y`, `date · D/M or M/D`, `date · mixed layouts`, plus `· MIXED`) | ISO dates (`2026-10-23`), or day/month dates with a trailing year (`23/10/2026`, `5.3.2026`, `1-2-2026`; a two-digit year only after `/`), either optionally followed by a time. The layout comes from the cells: a first part over 12 proves day-first, a second part over 12 proves month-first, neither leaves it ambiguous. `MIXED` when stray non-date values contaminate the column |
 | `int` | `int` (or `int · MIXED`) | integers; `MIXED` when a few non-numeric values (`n/a`, a lone `$5`) contaminate the column |
 | `decimal` | `decimal` (or `decimal · MIXED`) | real numbers; `MIXED` as for `int` |
 | `categorical` | `text · categorical` | low-cardinality text; detail shows the top values with counts |
@@ -152,7 +154,7 @@ render with `!`; structure with `·`.
 | `currency_text` | `$`/comma currency (optionally plus float-precision noise) — de-currency before math |
 | `mixed_type` | a numeric-dominant column with stray non-numeric values (`num()` skips them), a date column with stray non-date values, or a boolean-dominant column with stray non-boolean sentinels |
 | `mixed_bool` | a boolean column mixing spelling families — normalize before logic |
-| `case_variant` | a text column holding values that differ only in case (`Active` / `active`), padding set aside — a group-by or join splits them |
+| `case_variant` | a text column holding values that differ only in case (`Active` / `active`), padding set aside — a group-by or join splits them. An id-named column and a value holding a digit are left out, since case-sensitive keys differ by case on purpose |
 | `whitespace_pad` | values with leading or trailing whitespace, any class — an equality test or join misses them |
 | `non_iso_date` | day/month dates in a proven order — a reader assuming the other order swaps day and month or rejects the cell |
 | `ambiguous_date` | day/month dates where no part is over 12, so every value reads both ways — confirm the layout at the source |
