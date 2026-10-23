@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 //! xray — a read-only profiler for tabular data.
 //!
 //! Films a delimited file — or piped data — and reports what it is (see
@@ -160,7 +163,13 @@ fn main() -> ExitCode {
         Ok(s) => {
             if cli.json {
                 let value = json::to_json(&name, path.map(|_| source.as_str()), &s, cli.refer);
-                println!("{}", serde_json::to_string_pretty(&value).unwrap());
+                // A reader that stops early (`| head`) closes the pipe; that is
+                // not an error, so the write result is dropped as the render's is.
+                let _ = writeln!(
+                    std::io::stdout(),
+                    "{}",
+                    serde_json::to_string_pretty(&value).unwrap()
+                );
                 return ExitCode::SUCCESS;
             }
             let choice = match cli.color {

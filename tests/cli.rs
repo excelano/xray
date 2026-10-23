@@ -679,3 +679,87 @@ fn piped_input_gets_referrals_but_no_commands() {
         );
     }
 }
+
+#[test]
+fn the_buried_header_finding_names_the_no_header_step() {
+    // Following the bare finding without --no-header drops the header and
+    // shifts every row address by one, at exit 0.
+    let v = profile("fixtures/messy/risk_log.csv");
+    let buried = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["kind"] == "buried_header")
+        .expect("no buried_header finding");
+    let detail = buried["detail"].as_str().unwrap();
+    assert!(detail.contains("--no-header"), "detail {detail:?}");
+    assert!(detail.contains("row 6"), "detail {detail:?}");
+}
+
+#[test]
+fn a_column_command_reads_the_table_xray_read() {
+    // A title block and a semicolon: xled would otherwise take the title as
+    // the header and split on commas, and the named column would not exist.
+    let path = "fixtures/messy/titled_spend.csv";
+    let v = profile_with(&["--json", "--refer", path]);
+    let cmd = referrals(&v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains("currency text"))
+        .and_then(|r| r["command"].as_str())
+        .expect("currency referral carries no command");
+    assert_eq!(
+        cmd,
+        format!("xled -d ';' --no-header '4:$ crop\n1 header\n[Amount] s/[$,]//g' {path}")
+    );
+}
+
+#[test]
+fn a_quote_in_a_header_does_not_break_the_command() {
+    let input = "Name,Vendor's Cost\nA,\"$1,000\"\nB,$20\n";
+    let dir = std::env::temp_dir().join(format!("xray-quote-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("quote.csv");
+    std::fs::write(&file, input).unwrap();
+    let path = file.to_str().unwrap();
+    let v = profile_with(&["--json", "--refer", path]);
+    std::fs::remove_dir_all(&dir).unwrap();
+    let cmd = referrals(&v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains("currency text"))
+        .and_then(|r| r["command"].as_str())
+        .expect("currency referral carries no command")
+        .to_string();
+    assert!(
+        cmd.starts_with(r"xled '[Vendor'\''s Cost] s/[$,]//g' "),
+        "command {cmd:?}"
+    );
+}
+
+#[test]
+fn a_reader_that_stops_early_is_not_a_crash() {
+    // Wide enough that the JSON overflows a pipe buffer, so the write is still
+    // going when the reader hangs up.
+    let header: Vec<String> = (0..3000).map(|i| format!("c{i}")).collect();
+    let row: Vec<String> = (0..3000).map(|i| i.to_string()).collect();
+    let input = format!("{}\n{}\n", header.join(","), row.join(","));
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_xray"))
+        .args(["--json", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run xray");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let mut first = [0u8; 1];
+    std::io::Read::read_exact(child.stdout.as_mut().unwrap(), &mut first).unwrap();
+    drop(child.stdout.take());
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("panicked"), "xray panicked: {stderr}");
+}

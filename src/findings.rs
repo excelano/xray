@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 //! The findings register: the diagnostic problem list, ranked most-severe
 //! first. Reports damage; never fixes it (that's xled) and never filters it
 //! (that's xql). Every finding names what will bite a later step.
@@ -6,6 +9,8 @@
 //! headers are detected in the scan; stacked/side-by-side tables, whitespace
 //! pad, smart-punct/HTML-entities, and multi-value newline cells are layered in
 //! during the corpus-tuning pass.
+
+use std::path::Path;
 
 use crate::resolve::{col_letter, resolve, Class};
 use crate::scan::{LineEndings, Scan};
@@ -80,6 +85,20 @@ fn is_id_header(header: &str) -> bool {
         || h.ends_with("No")
 }
 
+/// The rows above a buried header: "row 1" or "rows 1–3".
+fn preamble_rows(n: usize) -> String {
+    if n == 1 {
+        "row 1".into()
+    } else {
+        format!("rows 1–{n}")
+    }
+}
+
+/// The same span as the subject of a sentence: "row 1 is" or "rows 1–3 are".
+fn preamble_span(n: usize) -> String {
+    format!("{} {}", preamble_rows(n), if n == 1 { "is" } else { "are" })
+}
+
 fn col_name(header: &str, letter: &str) -> String {
     if header.trim().is_empty() {
         format!("column {letter}")
@@ -129,10 +148,9 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
             column: None,
             subject: format!("buried header — row {}", scan.header_row),
             detail: format!(
-                "row{} 1–{} {} preamble above the header; crop with xled before profiling",
-                if scan.preamble == 1 { "" } else { "s" },
-                scan.preamble,
-                if scan.preamble == 1 { "is" } else { "are" },
+                "{} preamble above the header; xled must read it with --no-header (without it every row address is off by one), crop from row {} and promote it",
+                preamble_span(scan.preamble),
+                scan.header_row,
             ),
         });
     }
@@ -388,6 +406,11 @@ pub struct Referral {
     pub command: Option<String>,
 }
 
+/// Wrap `s` in single quotes, closing and reopening around any quote it holds.
+fn single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
 /// Quote a path for the emitted command when the shell would otherwise mangle it.
 fn shell_quote(path: &str) -> String {
     if !path.is_empty()
@@ -397,8 +420,43 @@ fn shell_quote(path: &str) -> String {
     {
         path.to_string()
     } else {
-        format!("'{}'", path.replace('\'', r"'\''"))
+        single_quote(path)
     }
+}
+
+/// An xled invocation that runs `script` against the table as xray read it.
+///
+/// xled assumes a comma (tab for a `.tsv`) and a header on row 1, so the
+/// command carries `-d` when the delimiter differs, and `--no-header` when the
+/// header is elsewhere or absent. Over a buried header the script first crops
+/// to the table and promotes its header, so a column named in `script` exists
+/// by the time it runs. The crop runs to the last row (`$`) and discards only
+/// the preamble; a total row below the table stays for its own referral.
+fn xled_command(scan: &Scan, path: &str, script: &[&str]) -> String {
+    let assumed = match Path::new(path).extension().and_then(|e| e.to_str()) {
+        Some("tsv") => b'\t',
+        _ => b',',
+    };
+    let mut cmd = String::from("xled");
+    match scan.delimiter {
+        d if d == assumed => {}
+        b'\t' => cmd.push_str(r" -d '\t'"),
+        d => cmd.push_str(&format!(" -d {}", shell_quote(&(d as char).to_string()))),
+    }
+    let mut lines = Vec::new();
+    if scan.header_row != 1 {
+        cmd.push_str(" --no-header");
+    }
+    if scan.preamble > 0 {
+        lines.push(format!("{}:$ crop", scan.header_row));
+        lines.push("1 header".into());
+    }
+    lines.extend(script.iter().map(|l| l.to_string()));
+    format!(
+        "{cmd} {} {}",
+        single_quote(&lines.join("\n")),
+        shell_quote(path)
+    )
 }
 
 /// How to address a column in an emitted command: by header name when it has
@@ -423,20 +481,16 @@ fn address(header: &str, letter: &str) -> String {
 /// written because there is no file to name.
 pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
     let mut refs = Vec::new();
-    let file = path.map(shell_quote);
 
     // ---- structure: the table is not where the addresses say it is ----
     if scan.preamble > 0 {
         refs.push(Referral {
-            trigger: format!("rows 1–{} above the header", scan.preamble),
+            trigger: format!("{} above the header", preamble_rows(scan.preamble)),
             tool: "xled",
             action: format!(
                 "read with --no-header, crop to the table, promote row {}",
                 scan.header_row
             ),
-            // Three interacting pieces (--no-header, a crop range, a header
-            // promotion) whose correct spelling depends on where the data ends.
-            // Left as prose deliberately: a wrong crop silently discards rows.
             command: None,
         });
     }
@@ -483,9 +537,7 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
                     trigger: format!("{label} is currency text"),
                     tool: "xled",
                     action: "strip the formatting before any math".into(),
-                    command: file
-                        .as_ref()
-                        .map(|f| format!("xled '{addr} s/[$,]//g' {f}")),
+                    command: path.map(|p| xled_command(scan, p, &[&format!("{addr} s/[$,]//g")])),
                 });
             }
             Class::LeadingZero => leading_zero.push(label.clone()),

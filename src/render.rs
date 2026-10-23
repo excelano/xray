@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 //! Human render of the film, reading, and findings registers. Plain text for
 //! now; colour (anstyle/anstream) and --refer / --json layer on later.
 
@@ -210,8 +213,15 @@ pub fn render(name: &str, path: Option<&str>, scan: &Scan, refer: bool) -> Strin
                 // The command sits on its own line under the referral it
                 // belongs to, indented past the trigger column, so it can be
                 // copied without picking up the prose around it.
+                // A multi-line script keeps the indent on every line; xled
+                // ignores leading space, so the block still pastes and runs.
                 if let Some(cmd) = &r.command {
-                    out.push_str(&format!("  {}\n", paint(theme::FAINT, &format!("  {cmd}"))));
+                    for line in cmd.lines() {
+                        out.push_str(&format!(
+                            "  {}\n",
+                            paint(theme::FAINT, &format!("  {line}"))
+                        ));
+                    }
                 }
             }
         }
