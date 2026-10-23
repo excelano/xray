@@ -9,7 +9,8 @@ description: >-
   reports what the file is (shape, delimiter, encoding, a buried header under a title block),
   what each column holds (type, fill, cardinality — stringly-typed, so leading zeros and
   16+-digit IDs stay text, not numbers), and what will bite a later step (ragged rows,
-  pre-aggregated total rows, currency trapped as text, mixed types, duplicate keys). With
+  pre-aggregated total rows, currency trapped as text, mixed types, duplicate keys, padded
+  or case-split values, dates a parser will misread). With
   `--refer` it names the sibling that treats each hazard and writes the command where the
   repair is unambiguous. Better than `head`/`cat` or a pandas `df.info()`: it parses quotes
   and embedded commas correctly and ranks hazards rather than listing statistics. Read-only —
@@ -43,7 +44,7 @@ Four tools, four verbs over the same delimited file, split by *what changes*:
   *geometry* and never a value (unpivot a wide export, pivot, transpose, split a column,
   explode a delimited cell, merge columns).
 - **xql queries** — set-level questions over the row *set* (filter, aggregate, group,
-  join, sort, dedupe) via SQL/DuckDB.
+  join, sort, dedupe) in a SQL-shaped query language.
 
 xray is where you **start** on a file you don't yet trust. It produces no output file and
 takes no destructive action; its whole job is to tell you which of the other three to
@@ -94,17 +95,18 @@ row is tagged `· unique key` — useful context, not a problem.
 
 **FINDINGS** — the ranked problem list, most severe first, in three groups:
 `correctness` (the data is wrong: no data rows, a non-UTF-8 file, ragged rows,
-pre-aggregated total rows, a buried header) → `type safety` (a value will be corrupted by
-a naïve cast: leading-zero text, 16+-digit IDs, E-notation, currency text, mixed types,
-mixed boolean spellings) → `structure` (shape smells: a BOM, mixed line endings,
+pre-aggregated total rows, a buried header) → `type safety` (a value will be corrupted or
+missed by a naïve cast, parse or comparison: leading-zero text, 16+-digit IDs, E-notation,
+currency text, mixed types, mixed boolean spellings, padded values, case variants, non-ISO,
+ambiguous or mixed date layouts) → `structure` (shape smells: a BOM, mixed line endings,
 empty/spacer columns, constant columns, duplicate keys, sparse columns, duplicate
 headers). Correctness and type-safety items are marked `!`; structure notes are marked
 `·`. A clean file prints `FINDINGS  (0)   clean — nothing flagged`.
 
 **REFERRAL** (only with `--refer`) — hands each hazard to the sibling that treats it,
 naming the column it is about: preamble and pre-aggregated and ragged rows → xled;
-currency text → xled; leading-zero and long-ID columns → xled, where the right move is to
-leave them alone; numbers trapped as text → xql once those columns are clean.
+currency text, dates, padding and case variants → xled; leading-zero and long-ID columns →
+xled, where the right move is to leave them alone; numbers trapped as text → xql once those columns are clean.
 
 Where the repair is a single unambiguous invocation, the referral prints **the command**
 on the line beneath it, already addressed to this file's name and headers:
@@ -129,7 +131,7 @@ it touches anything. Add `-i` once the preview is right.
 ## The type model (the part that matters)
 
 xray classifies **stringly** — a value stays text until it is unambiguously not — because
-that is exactly the discipline xled and xql rely on. Two consequences to internalize:
+that is exactly the discipline xled and xql rely on. The consequences to internalize:
 
 - **Leading zeros stay text.** `0012`, a zip like `02139`, an account number — reported
   as `text · leading-0` with `keep as text`, never as an integer. A numeric cast would
@@ -140,6 +142,11 @@ that is exactly the discipline xled and xql rely on. Two consequences to interna
 - **E-notation is lost digits.** `1.23E+15` is what Excel makes of a long number on
   export; it parses as a float, which is the trap. xray reads it as `text · e-notation`
   and flags `digits lost` — if it was an ID, the file no longer holds it.
+- **A date's layout is read from evidence, never guessed.** `2026-10-23` is ISO and reads
+  `date`. A slash date is `D/M/Y` only when some cell's first part is over 12
+  (`23/10/2026`), and `M/D/Y` only when a second part is. When no cell settles it, the
+  column reads `date · D/M or M/D` and the finding says to confirm the layout at the
+  source; xled refuses to guess the same question.
 
 Currency (`$1,200.00`) is reported as `text · currency`, not a number — the `$` and
 thousands commas make it a string until xled strips them. When xray flags float-precision
@@ -176,7 +183,7 @@ xray never fixes and never queries — it points. Once you know what's wrong:
 - **Reshaping the grid** — unpivot a wide export, pivot, transpose, split a column,
   explode a delimited cell, merge columns → **xshape** (`skills/xshape`).
 - **Querying the row set** — join, group, aggregate, sort, dedupe, filter rows in or out
-  → **SQL/DuckDB** (**xql**, `skills/xql`).
+  → **xql** (`skills/xql`).
 
 If you catch yourself wanting xray to *change* the file or *answer a question about the
 rows*, that's the signal to hand off. xray's job ends at the diagnosis.

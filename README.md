@@ -31,7 +31,7 @@ FINDINGS  (5)   1 correctness · 3 type safety · 1 structure
 
 Every job on a messy CSV starts the same way: orient before acting. What are the columns, what type is each *really*, how many rows, how many blanks, what's the delimiter, is a header even on the first row? That first-contact profiling has been scattered across half a dozen general tools — `qsv`, `csvstat`, `datamash`, `head` — none of which quite answers the question you actually have, which is not "what's the mean of column 4" but *"what's going to break when I touch this?"*
 
-xray answers that. Its **findings** register is a ranked problem list, not more statistics: ragged rows, total rows masquerading as data, leading-zero IDs a cast would mangle, currency trapped as text, mixed-type columns, headers buried under title rows. Everything it flags is damage that would corrupt a later step, and every finding names the tool that fixes it.
+xray answers that. Its **findings** register is a ranked problem list, not more statistics: ragged rows, total rows masquerading as data, leading-zero IDs a cast would mangle, currency trapped as text, mixed-type columns, headers buried under title rows, values padded with spaces or split by case, dates a parser will read the wrong way round. Everything it flags is damage that would corrupt a later step, and every finding names the tool that fixes it.
 
 It is stringly-typed on purpose. `02134` is text, not the number 2134; an 18-digit ID is text, not a rounded float — because silently coercing those is exactly the surprise xray exists to catch. And it only ever *observes*: it never edits a value, drops a row, or filters a result. The day it grows a `--where` it has become a worse query tool.
 
