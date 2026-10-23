@@ -99,11 +99,14 @@ fn preamble_span(n: usize) -> String {
     format!("{} {}", preamble_rows(n), if n == 1 { "is" } else { "are" })
 }
 
+/// A column as findings and referrals name it, on one line: a header holding
+/// an Alt+Enter break shows it as ⏎.
 fn col_name(header: &str, letter: &str) -> String {
     if header.trim().is_empty() {
         format!("column {letter}")
     } else {
-        format!("{header} ({letter})")
+        let flat = header.replace("\r\n", "⏎").replace(['\r', '\n'], "⏎");
+        format!("{flat} ({letter})")
     }
 }
 
@@ -461,11 +464,12 @@ fn xled_command(scan: &Scan, path: &str, script: &[&str]) -> String {
 
 /// How to address a column in an emitted command: by header name when it has
 /// one, falling back to the spreadsheet letter when the name is blank or
-/// carries the `]` that would close the bracket early. The name goes in as the
+/// carries the `]` that would close the bracket early or a line break that
+/// would end the xled command mid-name. The name goes in as the
 /// file spells it, padding included: xled matches it exactly, and an
 /// assignment to a near miss creates a new column instead of failing.
 fn address(header: &str, letter: &str) -> String {
-    if header.trim().is_empty() || header.contains(']') {
+    if header.trim().is_empty() || header.contains([']', '\n', '\r']) {
         letter.to_string()
     } else {
         format!("[{header}]")

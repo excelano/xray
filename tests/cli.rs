@@ -779,3 +779,12 @@ fn a_reader_that_stops_early_is_not_a_crash() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!stderr.contains("panicked"), "xray panicked: {stderr}");
 }
+
+#[test]
+fn a_header_with_a_line_break_is_addressed_by_letter() {
+    let v = refer_on("ml.csv", "\"Ship\nDate\",N\n\"$1,000\",x\n$2,y\n");
+    let cmd = currency_command(&v);
+    assert!(cmd.starts_with("xled 'A s/[$,]//g' "), "command {cmd:?}");
+    let trigger = referrals(&v)[0]["trigger"].as_str().unwrap().to_string();
+    assert!(trigger.starts_with("Ship⏎Date (A)"), "trigger {trigger:?}");
+}
