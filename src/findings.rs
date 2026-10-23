@@ -6,14 +6,14 @@
 //! (that's xql). Every finding names what will bite a later step.
 //!
 //! Grounded in the corpus taxonomy (`~/xled-corpus/CORPUS-FINDINGS.md`). Buried
-//! headers are detected in the scan; stacked/side-by-side tables, whitespace
-//! pad, smart-punct/HTML-entities, and multi-value newline cells are layered in
+//! headers are detected in the scan; stacked/side-by-side tables,
+//! smart-punct/HTML-entities, and multi-value newline cells are layered in
 //! during the corpus-tuning pass.
 
 use std::path::Path;
 
-use crate::resolve::{col_letter, resolve, Class};
-use crate::scan::{LineEndings, Scan};
+use crate::resolve::{col_letter, date_layout, resolve, Class, DateLayout};
+use crate::scan::{Column, LineEndings, Scan};
 
 /// Severity group. Also selects the glyph and the colour: Correctness and
 /// TypeSafety warn with `!`, Structure notes with `·`.
@@ -108,6 +108,62 @@ fn col_name(header: &str, letter: &str) -> String {
         let flat = header.replace("\r\n", "⏎").replace(['\r', '\n'], "⏎");
         format!("{flat} ({letter})")
     }
+}
+
+/// A cell value as a finding quotes it: in quotes, so padding shows, and on
+/// one line.
+fn quoted(value: &str) -> String {
+    format!(
+        "\"{}\"",
+        value.replace("\r\n", "⏎").replace(['\r', '\n'], "⏎")
+    )
+}
+
+/// Groups of values that differ only in case, each in first-seen-spelling
+/// order, most frequent group first. Padding is set aside first, so `Acme `
+/// and `acme` count as a case variant and not as two findings' worth.
+fn case_variants(col: &Column) -> Vec<Vec<String>> {
+    let mut groups: std::collections::HashMap<String, Vec<(&str, usize)>> =
+        std::collections::HashMap::new();
+    for (value, n) in &col.freq {
+        let v = value.trim();
+        let forms = groups.entry(v.to_lowercase()).or_default();
+        match forms.iter_mut().find(|(f, _)| *f == v) {
+            Some((_, total)) => *total += n,
+            None => forms.push((v, *n)),
+        }
+    }
+    let mut out: Vec<(usize, Vec<String>)> = groups
+        .into_values()
+        .filter(|forms| forms.len() > 1)
+        .map(|mut forms| {
+            forms.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+            let total = forms.iter().map(|(_, n)| n).sum();
+            (
+                total,
+                forms.into_iter().map(|(f, _)| f.to_string()).collect(),
+            )
+        })
+        .collect();
+    out.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    out.into_iter().map(|(_, forms)| forms).collect()
+}
+
+/// The xled format a date column converts under, when one format reads every
+/// non-ISO cell: a proven order, one separator, one year width.
+fn date_format(col: &Column) -> Option<String> {
+    let d = &col.dates;
+    let (a, b) = match date_layout(col) {
+        DateLayout::DayFirst => ("D", "M"),
+        DateLayout::MonthFirst => ("M", "D"),
+        _ => return None,
+    };
+    let ([sep], [digits]) = (&d.separators[..], &d.year_digits[..]) else {
+        return None;
+    };
+    let sep = *sep as char;
+    let year = if *digits == 4 { "YYYY" } else { "YY" };
+    Some(format!("{a}{sep}{b}{sep}{year}"))
 }
 
 pub fn findings(scan: &Scan) -> Vec<Finding> {
@@ -265,6 +321,63 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                     r.detail
                 ),
             }),
+            Class::Date => {
+                let d = &col.dates;
+                let layout = date_layout(col);
+                let example = d.example.as_deref().unwrap_or_default();
+                let finding = match layout {
+                    DateLayout::Iso => None,
+                    DateLayout::DayFirst | DateLayout::MonthFirst => {
+                        let (proof, puts, other) = if layout == DateLayout::DayFirst {
+                            (&d.day_first, "day", "M/D")
+                        } else {
+                            (&d.month_first, "month", "D/M")
+                        };
+                        Some((
+                            "non_iso_date",
+                            format!("{name} is {} dates, not ISO", layout.label()),
+                            format!(
+                                "{} puts the {puts} first; a reader that assumes {other} swaps day and month or rejects the cell — convert to ISO",
+                                proof.as_deref().unwrap_or_default()
+                            ),
+                        ))
+                    }
+                    DateLayout::Ambiguous => Some((
+                        "ambiguous_date",
+                        format!("{name} has dates that read two ways"),
+                        format!(
+                            "no day or month is over 12, so {example} is both D/M and M/D — confirm the layout at the source before parsing"
+                        ),
+                    )),
+                    DateLayout::Mixed => {
+                        let detail = match (&d.day_first, &d.month_first) {
+                            (Some(dm), Some(md)) => format!(
+                                "{dm} puts the day first and {md} the month — two sources merged; one parse reads half of them wrong"
+                            ),
+                            _ => format!(
+                                "{} ISO cell{} beside {} like {example}; one parse reads only one layout",
+                                d.iso,
+                                if d.iso == 1 { "" } else { "s" },
+                                if d.numeric == 1 { "one" } else { "others" },
+                            ),
+                        };
+                        Some((
+                            "mixed_date_format",
+                            format!("{name} mixes date layouts"),
+                            detail,
+                        ))
+                    }
+                };
+                if let Some((kind, subject, detail)) = finding {
+                    out.push(Finding {
+                        group: Group::TypeSafety,
+                        kind,
+                        column: at.clone(),
+                        subject,
+                        detail,
+                    });
+                }
+            }
             Class::Currency => {
                 let seen = match (col.currency_symbol, col.currency_grouping) {
                     (true, true) => "$ and thousands commas",
@@ -300,6 +413,8 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
             let (s, them) = if n == 1 { ("", "it") } else { ("s", "them") };
             let detail = if r.class == Class::Bool {
                 format!("boolean with {n} non-boolean value{s} — a stray sentinel breaks logic; normalize {them} first")
+            } else if r.class == Class::Date {
+                format!("date with {n} non-date value{s} — a date parse skips {them}")
             } else {
                 format!(
                     "{} numeric with {n} non-numeric value{s} — num() skips {them}",
@@ -313,6 +428,43 @@ pub fn findings(scan: &Scan) -> Vec<Finding> {
                 subject: format!("{name} mixes types"),
                 detail,
             });
+        }
+
+        if col.padded > 0 {
+            let n = col.padded;
+            out.push(Finding {
+                group: Group::TypeSafety,
+                kind: "whitespace_pad",
+                column: at.clone(),
+                subject: format!("{name} has padded values"),
+                detail: format!(
+                    "{n} value{} with leading or trailing whitespace, like {} — an equality test or join misses {}",
+                    if n == 1 { "" } else { "s" },
+                    quoted(col.pad_example.as_deref().unwrap_or_default()),
+                    if n == 1 { "it" } else { "them" },
+                ),
+            });
+        }
+        if matches!(r.class, Class::Text | Class::Categorical) {
+            let variants = case_variants(col);
+            if let Some(first) = variants.first() {
+                let shown: Vec<String> = first.iter().map(|v| quoted(v)).collect();
+                let more = if variants.len() > 1 {
+                    format!(" (+{} more)", variants.len() - 1)
+                } else {
+                    String::new()
+                };
+                out.push(Finding {
+                    group: Group::TypeSafety,
+                    kind: "case_variant",
+                    column: at.clone(),
+                    subject: format!("{name} spells a value more than one way"),
+                    detail: format!(
+                        "{}{more} differ only in case — a group-by or join splits them",
+                        shown.join(" / ")
+                    ),
+                });
+            }
         }
 
         // schema notes
@@ -528,6 +680,8 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
     // ---- per column ----
     let mut leading_zero: Vec<String> = Vec::new();
     let mut long_id: Vec<String> = Vec::new();
+    let mut padded: Vec<(String, String)> = Vec::new();
+    let mut cased: Vec<String> = Vec::new();
     let mut trapped = false;
     for (i, col) in scan.columns.iter().enumerate() {
         let r = resolve(col);
@@ -545,9 +699,44 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
                     command: path.map(|p| xled_command(scan, p, &[&format!("{addr} s/[$,]//g")])),
                 });
             }
+            Class::Date => {
+                let layout = date_layout(col);
+                let (trigger, action) = match layout {
+                    DateLayout::Iso => (None, ""),
+                    DateLayout::DayFirst | DateLayout::MonthFirst => (
+                        Some(format!("{label} is {} dates", layout.label())),
+                        "convert to ISO with date() under that layout",
+                    ),
+                    DateLayout::Ambiguous => (
+                        Some(format!("{label} reads D/M or M/D")),
+                        "confirm the layout at the source, then convert with date()",
+                    ),
+                    DateLayout::Mixed => (
+                        Some(format!("{label} mixes date layouts")),
+                        "separate the layouts first; date() reads one at a time",
+                    ),
+                };
+                if let Some(trigger) = trigger {
+                    let script =
+                        date_format(col).map(|fmt| format!("{addr} = date({addr}, \"{fmt}\")"));
+                    refs.push(Referral {
+                        trigger,
+                        tool: "xled",
+                        action: action.into(),
+                        command: script
+                            .and_then(|script| path.map(|p| xled_command(scan, p, &[&script]))),
+                    });
+                }
+            }
             Class::LeadingZero => leading_zero.push(label.clone()),
             Class::LongId => long_id.push(label.clone()),
             _ => {}
+        }
+        if col.padded > 0 {
+            padded.push((label.clone(), addr.clone()));
+        }
+        if matches!(r.class, Class::Text | Class::Categorical) && !case_variants(col).is_empty() {
+            cased.push(label.clone());
         }
         if r.mixed > 0 || r.bool_mixed {
             trapped = true;
@@ -571,6 +760,30 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
             trigger: format!("{} stays text", long_id.join(", ")),
             tool: "xled",
             action: "a numeric cast rounds the digits away — keep it text, never cast it".into(),
+            command: None,
+        });
+    }
+    // One trim script for every padded column: the repair is the same and
+    // unambiguous for each, so one invocation does all of it.
+    if !padded.is_empty() {
+        let labels: Vec<&str> = padded.iter().map(|(l, _)| l.as_str()).collect();
+        let script: Vec<String> = padded
+            .iter()
+            .map(|(_, a)| format!("{a} = trim({a})"))
+            .collect();
+        let script: Vec<&str> = script.iter().map(String::as_str).collect();
+        refs.push(Referral {
+            trigger: format!("{} padded", labels.join(", ")),
+            tool: "xled",
+            action: "trim before any join or comparison".into(),
+            command: path.map(|p| xled_command(scan, p, &script)),
+        });
+    }
+    if !cased.is_empty() {
+        refs.push(Referral {
+            trigger: format!("{} case variants", cased.join(", ")),
+            tool: "xled",
+            action: "choose the spelling, then normalize with s/// or upper()/lower()".into(),
             command: None,
         });
     }

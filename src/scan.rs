@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 //! Single streaming pass over a delimited file, accumulating a fixed profile.
 //!
 //! Read-only and O(1)-ish in memory: per-column accumulators plus distinct and
@@ -24,7 +27,74 @@ pub enum Kind {
     Scientific,
     Currency,
     Bool,
+    Date,
     Text,
+}
+
+/// The shape of a date cell. Only the two forms a reader can be wrong about
+/// are recognised: ISO, which has one reading, and day/month-or-month/day
+/// with a trailing year, which has two whenever both leading parts are 12 or
+/// less.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DateForm {
+    /// `2026-10-23`, optionally followed by a time.
+    Iso,
+    /// `23/10/2026`, `1-2-2026`, `5.3.2026`, `23/10/26`: two leading parts in
+    /// either order, the separator, and the year's digit count.
+    Numeric {
+        first: u8,
+        second: u8,
+        sep: u8,
+        year_digits: u8,
+    },
+}
+
+fn small_number(part: &str) -> Option<u8> {
+    if (1..=2).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_digit()) {
+        part.parse().ok()
+    } else {
+        None
+    }
+}
+
+/// Read `s` (already trimmed) as a date, if it is one of the two forms.
+pub fn date_form(s: &str) -> Option<DateForm> {
+    let b = s.as_bytes();
+    if b.len() >= 10 && b[4] == b'-' && b[7] == b'-' {
+        let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
+        let rest = &b[10..];
+        let time_follows = rest.is_empty()
+            || (matches!(rest[0], b'T' | b' ')
+                && rest.len() >= 4
+                && rest[1].is_ascii_digit()
+                && rest[2].is_ascii_digit()
+                && rest[3] == b':');
+        if digits(0..4) && digits(5..7) && digits(8..10) && time_follows {
+            let month: u8 = s[5..7].parse().ok()?;
+            let day: u8 = s[8..10].parse().ok()?;
+            return ((1..=12).contains(&month) && (1..=31).contains(&day)).then_some(DateForm::Iso);
+        }
+        return None;
+    }
+    let sep = *b.iter().find(|c| matches!(c, b'/' | b'-' | b'.'))?;
+    let parts: Vec<&str> = s.split(sep as char).collect();
+    let [first, second, year] = parts[..] else {
+        return None;
+    };
+    let (first, second) = (small_number(first)?, small_number(second)?);
+    let year_digits = year.len() as u8;
+    // A two-digit year only after a slash: `1.2.10` is a version number and
+    // `12-05-99` a part code far more often than either is a date.
+    let year_ok = year.bytes().all(|c| c.is_ascii_digit())
+        && (year_digits == 4 || (year_digits == 2 && sep == b'/'));
+    let parts_ok =
+        (1..=31).contains(&first) && (1..=31).contains(&second) && (first <= 12 || second <= 12);
+    (year_ok && parts_ok).then_some(DateForm::Numeric {
+        first,
+        second,
+        sep,
+        year_digits,
+    })
 }
 
 /// Classify one raw cell value (already known non-blank).
@@ -43,6 +113,10 @@ pub fn classify(raw: &str) -> Kind {
     match s.to_ascii_lowercase().as_str() {
         "y" | "n" | "yes" | "no" | "true" | "false" | "t" | "f" => return Kind::Bool,
         _ => {}
+    }
+
+    if date_form(s).is_some() {
+        return Kind::Date;
     }
 
     let body = s.strip_prefix(['+', '-']).unwrap_or(s);
@@ -134,6 +208,25 @@ pub struct Column {
     /// both. The finding names what it saw rather than assuming both.
     pub currency_symbol: bool,
     pub currency_grouping: bool,
+    /// Cells carrying leading or trailing whitespace, and the first one seen.
+    pub padded: usize,
+    pub pad_example: Option<String>,
+    pub dates: DateTally,
+}
+
+/// What the date cells of a column agree on, and the first cell that settles
+/// each question.
+#[derive(Default)]
+pub struct DateTally {
+    pub iso: usize,
+    pub numeric: usize,
+    /// A cell whose first part is over 12, so the day comes first.
+    pub day_first: Option<String>,
+    /// A cell whose second part is over 12, so the month comes first.
+    pub month_first: Option<String>,
+    pub separators: Vec<u8>,
+    pub year_digits: Vec<u8>,
+    pub example: Option<String>,
 }
 
 impl Column {
@@ -156,6 +249,9 @@ impl Column {
             float_noise: false,
             currency_symbol: false,
             currency_grouping: false,
+            padded: 0,
+            pad_example: None,
+            dates: DateTally::default(),
         }
     }
 
@@ -171,6 +267,10 @@ impl Column {
             return;
         }
         self.nonblank += 1;
+        if trimmed.len() != raw.len() {
+            self.padded += 1;
+            self.pad_example.get_or_insert_with(|| raw.to_string());
+        }
 
         let kind = classify(raw);
         *self.kinds.entry(kind).or_insert(0) += 1;
@@ -206,6 +306,33 @@ impl Column {
                 let r = trimmed.to_string();
                 if !self.bool_reprs.contains(&r) {
                     self.bool_reprs.push(r);
+                }
+            }
+            Kind::Date => {
+                let d = &mut self.dates;
+                match date_form(trimmed) {
+                    Some(DateForm::Numeric {
+                        first,
+                        second,
+                        sep,
+                        year_digits,
+                    }) => {
+                        d.numeric += 1;
+                        if first > 12 {
+                            d.day_first.get_or_insert_with(|| trimmed.to_string());
+                        }
+                        if second > 12 {
+                            d.month_first.get_or_insert_with(|| trimmed.to_string());
+                        }
+                        if !d.separators.contains(&sep) {
+                            d.separators.push(sep);
+                        }
+                        if !d.year_digits.contains(&year_digits) {
+                            d.year_digits.push(year_digits);
+                        }
+                        d.example.get_or_insert_with(|| trimmed.to_string());
+                    }
+                    _ => d.iso += 1,
                 }
             }
             Kind::Currency => {
@@ -612,4 +739,35 @@ pub fn scan<R: Read>(
         utf8,
         bytes,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn date_forms() {
+        assert_eq!(date_form("2026-10-23"), Some(DateForm::Iso));
+        assert_eq!(date_form("2026-10-23T09:30:00Z"), Some(DateForm::Iso));
+        assert_eq!(date_form("2026-10-23 09:30"), Some(DateForm::Iso));
+        assert_eq!(date_form("2026-13-01"), None);
+        assert_eq!(date_form("2026-10-23x"), None);
+        assert_eq!(
+            date_form("23/10/26"),
+            Some(DateForm::Numeric {
+                first: 23,
+                second: 10,
+                sep: b'/',
+                year_digits: 2
+            })
+        );
+        assert!(date_form("5.3.2026").is_some());
+        assert!(date_form("1-2-2026").is_some());
+        // Neither part can be a month.
+        assert_eq!(date_form("23/24/2026"), None);
+        // Version numbers, part codes, fractions, phone numbers, month-year.
+        for not_a_date in ["1.2.10", "12-05-99", "1/2/3", "555-1234", "12/2026", "-1.5"] {
+            assert_eq!(date_form(not_a_date), None, "{not_a_date}");
+        }
+    }
 }

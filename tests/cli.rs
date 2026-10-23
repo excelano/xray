@@ -800,3 +800,89 @@ fn a_header_with_a_line_break_is_addressed_by_letter() {
     let trigger = referrals(&v)[0]["trigger"].as_str().unwrap().to_string();
     assert!(trigger.starts_with("Ship⏎Date (A)"), "trigger {trigger:?}");
 }
+
+fn finding<'a>(v: &'a Value, kind: &str, letter: &str) -> &'a Value {
+    v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["kind"] == kind && f["column"] == letter)
+        .unwrap_or_else(|| panic!("no {kind} finding on column {letter}"))
+}
+
+#[test]
+fn iso_dates_read_as_dates_and_are_clean() {
+    let v = profile("fixtures/clean/orders.csv");
+    assert_eq!(column(&v, "B")["class"], "date");
+    // A time after the date is still ISO; xled's date() truncates it.
+    assert_eq!(column(&v, "C")["class"], "date");
+    assert!(kinds(&v).is_empty(), "kinds {:?}", kinds(&v));
+}
+
+#[test]
+fn a_date_layout_is_read_from_the_cells_that_prove_it() {
+    let v = profile("fixtures/messy/crm_export.csv");
+    for letter in ["C", "D", "E", "F"] {
+        assert_eq!(column(&v, letter)["class"], "date", "column {letter}");
+    }
+    // 23/10/2026 can only be day-first.
+    assert!(finding(&v, "non_iso_date", "C")["detail"]
+        .as_str()
+        .unwrap()
+        .contains("23/10/2026"));
+    // Every part is 12 or less: no cell settles the order.
+    finding(&v, "ambiguous_date", "D");
+    // ISO beside a slash date, and a day-first cell beside a month-first one.
+    finding(&v, "mixed_date_format", "E");
+    finding(&v, "mixed_date_format", "F");
+    // A version number is not a date.
+    assert_eq!(column(&v, "G")["class"], "text");
+}
+
+#[test]
+fn padding_and_case_variants_are_findings() {
+    let v = profile("fixtures/messy/crm_export.csv");
+    assert!(finding(&v, "whitespace_pad", "A")["detail"]
+        .as_str()
+        .unwrap()
+        .contains("\"Acme Corp \""));
+    let cased = finding(&v, "case_variant", "B")["detail"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // " ACTIVE" is padded as well; it counts as a spelling of the same value.
+    for form in ["\"Active\"", "\"active\"", "\"ACTIVE\""] {
+        assert!(cased.contains(form), "detail {cased:?} lacks {form}");
+    }
+    // Client values differ by more than case.
+    assert!(!v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f["kind"] == "case_variant" && f["column"] == "A"));
+}
+
+#[test]
+fn a_proven_date_layout_and_padding_get_commands_and_the_rest_do_not() {
+    let path = "fixtures/messy/crm_export.csv";
+    let v = profile_with(&["--json", "--refer", path]);
+    let command_for = |needle: &str| {
+        referrals(&v)
+            .iter()
+            .find(|r| r["trigger"].as_str().unwrap().contains(needle))
+            .unwrap_or_else(|| panic!("no referral for {needle}"))["command"]
+            .clone()
+    };
+    assert_eq!(
+        command_for("Signed (C)"),
+        format!("xled '[Signed] = date([Signed], \"D/M/YYYY\")' {path}")
+    );
+    assert_eq!(
+        command_for("padded"),
+        format!("xled '[Client] = trim([Client])\n[Status] = trim([Status])' {path}")
+    );
+    // Which layout or which spelling is right is not xray's to decide.
+    for needle in ["Renewed (D)", "Due (E)", "Logged (F)", "case variants"] {
+        assert!(command_for(needle).is_null(), "{needle} carries a command");
+    }
+}

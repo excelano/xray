@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 //! One shared read of a column's type, used by both the reading render and the
 //! findings register so they never disagree. Stringly-typed: a value is text
 //! until it unambiguously isn't, and leading zeros keep it text.
@@ -27,10 +30,50 @@ pub enum Class {
     Scientific,
     Currency,
     Bool,
+    Date,
     Int,
     Decimal,
     Categorical,
     Text,
+}
+
+/// Which way a date column's cells read.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DateLayout {
+    Iso,
+    DayFirst,
+    MonthFirst,
+    /// Every non-ISO cell reads both ways: no part is over 12.
+    Ambiguous,
+    /// ISO beside another layout, or cells that prove both orders.
+    Mixed,
+}
+
+impl DateLayout {
+    /// The layout as xled's format tokens spell it, for the reading and the
+    /// findings: `D/M/Y`, `M/D/Y`.
+    pub fn label(self) -> &'static str {
+        match self {
+            DateLayout::Iso => "ISO",
+            DateLayout::DayFirst => "D/M/Y",
+            DateLayout::MonthFirst => "M/D/Y",
+            DateLayout::Ambiguous => "D/M or M/D",
+            DateLayout::Mixed => "mixed layouts",
+        }
+    }
+}
+
+pub fn date_layout(col: &Column) -> DateLayout {
+    let d = &col.dates;
+    if d.numeric == 0 {
+        return DateLayout::Iso;
+    }
+    match (d.iso > 0, d.day_first.is_some(), d.month_first.is_some()) {
+        (true, _, _) | (_, true, true) => DateLayout::Mixed,
+        (_, true, false) => DateLayout::DayFirst,
+        (_, false, true) => DateLayout::MonthFirst,
+        _ => DateLayout::Ambiguous,
+    }
 }
 
 impl Class {
@@ -43,6 +86,7 @@ impl Class {
             Class::Scientific => "scientific",
             Class::Currency => "currency",
             Class::Bool => "bool",
+            Class::Date => "date",
             Class::Int => "int",
             Class::Decimal => "decimal",
             Class::Categorical => "categorical",
@@ -177,6 +221,7 @@ pub fn resolve(col: &Column) -> Resolved {
     let decimals = count(col, Kind::Decimal);
     let currency = count(col, Kind::Currency);
     let booleans = count(col, Kind::Bool);
+    let dates = count(col, Kind::Date);
     let text = count(col, Kind::Text);
     let numeric = ints + decimals;
 
@@ -233,7 +278,35 @@ pub fn resolve(col: &Column) -> Resolved {
     }
     // Everything past here is a majority read, so whatever is not the majority
     // kind is contamination — the stray sentinel, the one formatted value.
-    //
+    if dates > 0 && dates >= numeric && dates >= text {
+        let layout = date_layout(col);
+        let mixed = col.nonblank - dates;
+        let mut label = String::from("date");
+        if layout != DateLayout::Iso {
+            label.push_str(&format!(" · {}", layout.label()));
+        }
+        if mixed > 0 {
+            label.push_str(" · MIXED");
+        }
+        let flag = if mixed > 0 {
+            Some(format!("{mixed} non-date value{}", plural(mixed)))
+        } else {
+            match layout {
+                DateLayout::Iso => None,
+                DateLayout::DayFirst | DateLayout::MonthFirst => Some("not ISO".into()),
+                DateLayout::Ambiguous => Some("layout unknown".into()),
+                DateLayout::Mixed => Some("mixed layouts".into()),
+            }
+        };
+        return Resolved {
+            class: Class::Date,
+            label,
+            detail: examples,
+            flag,
+            mixed,
+            ..base
+        };
+    }
     // Booleans, flagged only when the file mixes representation *families* —
     // Y/N with yes/no, say. Y and N alone are the two values of one family, not
     // mixed forms, so a plain Y/N column must not trip this.
