@@ -43,7 +43,7 @@ Exit codes:
 
 /// Profile a delimited file: columns, types, blanks, cardinality, top values.
 #[derive(Parser)]
-#[command(name = "xray", version, about, long_about = None, after_help = EXIT_CODES)]
+#[command(name = "xray", version = skill::version(), about, long_about = None, after_help = EXIT_CODES)]
 struct Cli {
     /// The CSV/DSV file to profile. Omit it, or give `-`, to read stdin.
     file: Option<PathBuf>,

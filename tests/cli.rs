@@ -1,3 +1,6 @@
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
+
 //! End-to-end tests: run the built `xray` binary against synthetic fixtures and
 //! assert on its --json output. These lock in the corpus-tuned heuristics
 //! (delimiter sniff, buried-header, boolean families, near-unique keys, long
@@ -476,10 +479,8 @@ fn the_reading_aligns_by_display_width_not_char_count() {
 fn the_json_says_which_xray_wrote_it() {
     let v = profile("fixtures/clean/employees.csv");
     let (version, _) = run(&["--version"]);
-    assert_eq!(
-        format!("xray {}", v["xray"].as_str().unwrap()),
-        version.trim()
-    );
+    let named = format!("xray {} (skill ", v["xray"].as_str().unwrap());
+    assert!(version.trim().starts_with(&named), "{version:?}");
 }
 
 #[test]
