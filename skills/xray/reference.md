@@ -74,7 +74,7 @@ is nothing to hand off.
 
 | Trigger | Tool | Action | Command |
 |---|---|---|---|
-| preamble rows above the header | xled | read with `--no-header`, crop, promote the header row | — |
+| preamble rows above the header | xled | read with `--no-header`, crop, promote the header row | `xled --no-header '4:$ crop` ⏎ `1 header' file.csv` |
 | pre-aggregated row *n* | xled | crop past the summary line before aggregating | — |
 | *n* ragged rows | xled | repair the stray delimiters; later addresses depend on the width | — |
 | *col* is currency text | xled | strip the formatting before any math | `xled '[col] s/[$,]//g' file.csv` |
@@ -90,9 +90,18 @@ than silence.
 Commands read rather than write — no `-i`. xray never changes a byte and does not hand
 over something that changes one by proxy; the preview is where the transform gets checked.
 
+Every command reads the table xray read. It carries `-d` when the delimiter is not the
+one xled assumes from the file name (comma, or tab for a `.tsv`), and `--no-header` when
+the header is not on row 1. Over a buried header, each column command begins with the same
+crop and promotion, so the column it names exists by the time it runs. The crop runs to the
+last row and discards only the preamble; a total row below the table is left for its own
+referral. A script of more than one line spans lines inside its quotes (⏎ above), since
+xled does not take `;` between commands.
+
 Column addressing is the bracketed header name, falling back to the spreadsheet letter
-when the header is blank or contains a `]`. The file path is shell-quoted when it needs
-it, and omitted entirely for piped stdin, where there is no file to name.
+when the header is blank or contains a `]`. A quote in the name is escaped for the shell.
+The file path is shell-quoted when it needs it, and the command is omitted entirely for
+piped stdin, where there is no file to name.
 
 ## Column classes
 

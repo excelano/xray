@@ -697,6 +697,18 @@ fn the_buried_header_finding_names_the_no_header_step() {
 }
 
 #[test]
+fn buried_header_referral_emits_the_crop_and_promotion() {
+    let path = "fixtures/messy/risk_log.csv";
+    let v = profile_with(&["--json", "--refer", path]);
+    let cmd = referrals(&v)
+        .iter()
+        .find(|r| r["trigger"].as_str().unwrap().contains("above the header"))
+        .and_then(|r| r["command"].as_str())
+        .expect("buried-header referral carries no command");
+    assert_eq!(cmd, format!("xled --no-header '6:$ crop\n1 header' {path}"));
+}
+
+#[test]
 fn a_column_command_reads_the_table_xray_read() {
     // A title block and a semicolon: xled would otherwise take the title as
     // the header and split on commas, and the named column would not exist.

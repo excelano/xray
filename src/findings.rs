@@ -496,7 +496,7 @@ pub fn referral(scan: &Scan, path: Option<&str>) -> Vec<Referral> {
                 "read with --no-header, crop to the table, promote row {}",
                 scan.header_row
             ),
-            command: None,
+            command: path.map(|p| xled_command(scan, p, &[])),
         });
     }
     if !scan.total_rows.is_empty() {
