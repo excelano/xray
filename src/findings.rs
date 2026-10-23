@@ -461,13 +461,14 @@ fn xled_command(scan: &Scan, path: &str, script: &[&str]) -> String {
 
 /// How to address a column in an emitted command: by header name when it has
 /// one, falling back to the spreadsheet letter when the name is blank or
-/// carries the `]` that would close the bracket early.
+/// carries the `]` that would close the bracket early. The name goes in as the
+/// file spells it, padding included: xled matches it exactly, and an
+/// assignment to a near miss creates a new column instead of failing.
 fn address(header: &str, letter: &str) -> String {
-    let h = header.trim();
-    if h.is_empty() || h.contains(']') {
+    if header.trim().is_empty() || header.contains(']') {
         letter.to_string()
     } else {
-        format!("[{h}]")
+        format!("[{header}]")
     }
 }
 

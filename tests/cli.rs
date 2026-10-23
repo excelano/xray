@@ -713,26 +713,42 @@ fn a_column_command_reads_the_table_xray_read() {
     );
 }
 
-#[test]
-fn a_quote_in_a_header_does_not_break_the_command() {
-    let input = "Name,Vendor's Cost\nA,\"$1,000\"\nB,$20\n";
-    let dir = std::env::temp_dir().join(format!("xray-quote-{}", std::process::id()));
+/// Profile `contents` written to a scratch file named `name`, with `--refer`,
+/// for the cases where the referral command needs a real path.
+fn refer_on(name: &str, contents: &str) -> Value {
+    let dir = std::env::temp_dir().join(format!("xray-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("quote.csv");
-    std::fs::write(&file, input).unwrap();
-    let path = file.to_str().unwrap();
-    let v = profile_with(&["--json", "--refer", path]);
+    let file = dir.join(name);
+    std::fs::write(&file, contents).unwrap();
+    let v = profile_with(&["--json", "--refer", file.to_str().unwrap()]);
     std::fs::remove_dir_all(&dir).unwrap();
-    let cmd = referrals(&v)
+    v
+}
+
+fn currency_command(v: &Value) -> String {
+    referrals(v)
         .iter()
         .find(|r| r["trigger"].as_str().unwrap().contains("currency text"))
         .and_then(|r| r["command"].as_str())
         .expect("currency referral carries no command")
-        .to_string();
+        .to_string()
+}
+
+#[test]
+fn a_quote_in_a_header_does_not_break_the_command() {
+    let v = refer_on("quote.csv", "Name,Vendor's Cost\nA,\"$1,000\"\nB,$20\n");
+    let cmd = currency_command(&v);
     assert!(
         cmd.starts_with(r"xled '[Vendor'\''s Cost] s/[$,]//g' "),
         "command {cmd:?}"
     );
+}
+
+#[test]
+fn a_padded_header_is_addressed_as_the_file_spells_it() {
+    let v = refer_on("pad.csv", "Amount ,b\n\"$1,000\",1\n$20,2\n");
+    let cmd = currency_command(&v);
+    assert!(cmd.starts_with("xled '[Amount ] s/"), "command {cmd:?}");
 }
 
 #[test]
