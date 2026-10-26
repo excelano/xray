@@ -1,6 +1,6 @@
 # xray — design
 
-**Name:** `xray` (x-family; you *x-ray* a file before you operate on it). The bare `xray` crate name is a dormant 2018 crate, so the crate publishes as **`x-ray`** — the real word, free because crates.io counts `xray` and `x-ray` as distinct names — with `[[bin]] name = "xray"`, so the command everyone types is still `xray`. This document is the design record; the open work lives in `BACKLOG.md`.
+**Name:** `xray` (x-family; you *x-ray* a file before you operate on it). On crates.io the crate is **`x-ray`**, with `[[bin]] name = "xray"`; the README's Install section says why. This document is the design record; the open work lives in `BACKLOG.md`.
 
 **One line:** a read-only profiler for a single delimited file — the "what *is* this?" you run first, before xled cleans it or xql queries it.
 
@@ -53,7 +53,7 @@ xray images a table and hands back a reading in three registers, always on, plus
 
 ### The findings catalogue
 
-Grounded row-for-row in `~/xled-corpus/CORPUS-FINDINGS.md` (143 real client spreadsheets), in three registers:
+Grounded row-for-row in a corpus of real client spreadsheets, kept outside the repository, in three registers:
 
 - **Structural** — buried header (via the modal-width-jump heuristic), preamble rows, leading/trailing blank rows, spacer column, trailing empty cols, total/subtotal rows, stacked tables, side-by-side tables, ragged rows, blank/duplicate headers.
 - **Value** — leading-zero/long-ID (→ keep text), currency formatting, float-precision noise (`449.29999999999995`), mixed-type column, whitespace pad, smart-punct / HTML-entity / escaping, multi-value newline cell.
@@ -70,9 +70,9 @@ The synthetic torture fixture `fixtures/messy/vendor_spend.csv` exercises a cros
 
 ## Architecture — stream, don't buffer
 
-**Resolution (Fork B):** xray is read-only and single-pass, so it *streams* — bounded memory regardless of file size, unlike xled (whole file in RAM, ~8.7× file size, ~1 GB on the 93 MB corpus exports). This is a capability win: xray profiles the big files xled chokes on, which fits "the first move on *any* file." The one cost is that exact distinct-counts need a **cardinality cap** — exact up to a bound (K distinct), then report `K+` (or an approximate count), with the cap stated in the output. Streaming with a cardinality cap is the design; the cap value is a tuning knob for the corpus phase.
+**Resolution (Fork B):** xray is read-only and single-pass, so it *streams* — bounded memory regardless of file size, unlike xled (whole file in RAM, several times the file size). This is a capability win: xray profiles the big files xled chokes on, which fits "the first move on *any* file." The one cost is that exact distinct-counts need a **cardinality cap** — exact up to a bound (K distinct), then report `K+` (or an approximate count), with the cap stated in the output. Streaming with a cardinality cap is the design; the cap value is a tuning knob for the corpus phase.
 
-> **The input is buffered.** The single pass and the cardinality cap are real, but the reader loads the whole input before the pass, because the delimiter sniff and the buried-header look-ahead both re-read the front and a pipe cannot rewind. Memory therefore tracks input size at about 1.1× (a 59 MB, 2-million-row file profiles in 1.5 s at 66 MB resident). That is the right trade for the stated user: a live session on client exports, which run to hundreds of megabytes, not gigabytes, and a multi-gigabyte file is DuckDB's territory through xql in any case. True streaming (sniff from a pre-read, then stream the rest) would be a non-breaking change and stays on the backlog at low priority. A file and a pipe take the same path.
+> **The input is buffered.** The single pass and the cardinality cap are real, but the reader loads the whole input before the pass, because the delimiter sniff and the buried-header look-ahead both re-read the front and a pipe cannot rewind. Memory therefore tracks input size. That is the right trade for the stated user: a live session on client exports, which run to hundreds of megabytes, not gigabytes, and a multi-gigabyte file is DuckDB's territory through xql in any case. True streaming (sniff from a pre-read, then stream the rest) would be a non-breaking change and stays on the backlog at low priority. A file and a pipe take the same path.
 
 ## Settled
 
@@ -82,15 +82,9 @@ The synthetic torture fixture `fixtures/messy/vendor_spend.csv` exercises a cros
 - **Type inference** — xled's cast philosophy exactly (string until unambiguously not; leading zeros / long IDs stay text), shared via the detection core above.
 - **Architecture** — one pass over a buffered input, with a cardinality cap of 10 000 (see the decision under Architecture).
 - **xled `describe`** — future consumer of the shared detection crate; **xql `describe`** stays separate (coerce-to-query type philosophy).
+- **Flag surface** — `--refer`, `--json`, `--color`, `--header`/`--no-header`, `-d`/`--delim`, `--install-skill`/`--uninstall-skill`, plus `--version`/`--help`. `--where`, `--select` and a row-sample flag are refused: filtering and sampling are a query's or `head`'s job.
+- **Bare command** — `xray file.csv` gives the full default profile; no flag is required. A bare `xray` at a terminal with nothing piped in is the one usage error, by the family's stdin rule.
 
-## Open — still to settle
+## The contract
 
-1. ~~**`--json` shape.**~~ **Done.** Same three registers as the human render, as one model / two renderings; findings carry a stable machine `kind` and column letter; referral gated by `--refer`; always plain.
-2. **The flag surface.** `--refer`, `--json`, `--color`, `--header`/`--no-header`, `-d`/`--delim`, `--install-skill`/`--uninstall-skill`, plus `--version`/`--help`. `--sample N` is dropped: a sample of real rows is `head`'s job and one step from a query. `--top N` waits until a real file asks for more than the four values the categorical detail shows. A subset column selector stays undecided on the backlog. `--where` and `--select` stay refused.
-3. ~~**Cardinality cap value.**~~ **Settled.** Exact to 10 000 distinct, then `10,000+` in the render and `distinct_capped: true` in the JSON; a capped column is never called a key.
-4. ~~**Buried-header heuristic.**~~ **Built.** Modal-width-jump detection over a bounded look-ahead buffer; reports the header row + preamble in the film and a `buried_header` finding; `--header <N>` (0 = none) overrides. False-positive threshold still wants real-corpus tuning (a row-1 header with trailing-blank cells can mis-detect).
-5. ~~**Bare-command / zero-config.**~~ **Confirmed.** `xray file.csv` gives the full default profile; no flag is required. A bare `xray` at a terminal with nothing piped in is the one usage error, by the family's stdin rule.
-
-## Where this stands
-
-Everything above is built. The `--json` view is the contract (keys, `class` and `kind` vocabularies, exit codes, only ever added to within a major version) and the reference in `skills/xray/reference.md` is its schema. The open work is in `BACKLOG.md`.
+The `--json` view is the contract (keys, `class` and `kind` vocabularies, exit codes, only ever added to within a major version) and the reference in `skills/xray/reference.md` is its schema. The open work is in `BACKLOG.md`.

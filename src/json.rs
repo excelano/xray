@@ -1,6 +1,9 @@
 //! The --json view: the same three registers as the human render, as structured
 //! data. One model, two renderings — a machine reader branches on `class` and
 //! finding `kind` instead of parsing prose. Always plain (no colour).
+//
+// Author: David M. Anderson
+// Built with AI assistance (Claude, Anthropic)
 
 use serde_json::{json, Value};
 

@@ -42,13 +42,13 @@ xray is the read-only member of the tabular family, four small tools for messy t
 - **xray** observes — a fixed whole-file profile, and never writes.
 - **[xled](https://github.com/excelano/xled)** edits cell *values* in place (sed and awk for tables).
 - **[xshape](https://github.com/excelano/xshape)** changes the *shape* of the grid, and never touches the values.
-- **[xql](https://github.com/excelano/xql)** queries the row *set* — filter, aggregate, group, join.
+- **[xql](https://github.com/excelano/xql)** queries the row *set* — filter, aggregate, group, sort. A join needs a second table, which is a full SQL engine's job.
 
 The other three act on the data; xray only looks. Its findings hand you off to them: leading zeros and total rows go to xled for a crop, a column trapped as one delimited cell goes to xshape, currency-cleaned columns go to xql for the query.
 
 ## Install
 
-Every install line below ends with `xray --install-skill`. That installs the [Claude Code skill](#use-it-from-claude-code) alongside the binary, which is the one step people reliably skipped when it lived further down the page. Drop it if you do not use Claude Code — the CLI itself does not need it.
+Every install line below ends with `xray --install-skill`. That installs the [Claude Code skill](#use-it-from-claude-code) alongside the binary. Drop it if you do not use Claude Code — the CLI itself does not need it.
 
 ### Debian and Ubuntu
 

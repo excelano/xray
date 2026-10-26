@@ -44,7 +44,8 @@ Four tools, four verbs over the same delimited file, split by *what changes*:
   *geometry* and never a value (unpivot a wide export, pivot, transpose, split a column,
   explode a delimited cell, merge columns).
 - **xql queries** — set-level questions over the row *set* (filter, aggregate, group,
-  join, sort, dedupe) in a SQL-shaped query language.
+  sort, dedupe) in a SQL-shaped query language; a join, which needs a second table, goes
+  to a full SQL engine.
 
 xray is where you **start** on a file you don't yet trust. It produces no output file and
 takes no destructive action; its whole job is to tell you which of the other three to

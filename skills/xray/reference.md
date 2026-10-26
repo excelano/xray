@@ -184,7 +184,7 @@ Top-level keys: `xray` (the version that wrote the profile), `file`, `film`, `re
 `findings`, `verdict` (and `referral` only with `--refer`).
 
 ```
-xray:    "0.5.0"
+xray:    "<version>"
 film:    { columns, rows, bytes, delimiter, encoding, bom, line_endings,
            header_row, preamble, ragged_rows }
 reading: [ { letter, header, type, class, fill_pct, nonblank, total, distinct,
