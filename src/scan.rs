@@ -1,17 +1,18 @@
 // Author: David M. Anderson
 // Built with AI assistance (Claude, Anthropic)
 
-//! Single streaming pass over a delimited file, accumulating a fixed profile.
+//! Single pass over a delimited file, accumulating a fixed profile.
 //!
-//! Read-only and O(1)-ish in memory: per-column accumulators plus distinct and
-//! frequency sets bounded by a cardinality cap, so xray profiles files far
-//! larger than xled can hold. Nothing here mutates or filters — it observes.
+//! The input is read into memory first, because the delimiter sniff and the
+//! buried-header look-ahead re-read its front. The pass itself keeps
+//! per-column accumulators plus distinct and frequency sets bounded by a
+//! cardinality cap. Nothing here mutates or filters — it observes.
 
 use std::collections::HashMap;
 use std::io::Read;
 
 /// Distinct values tracked exactly up to this many per column; beyond it the
-/// count is reported as `CAP+`. A corpus-tuning knob (DESIGN.md, open item 3).
+/// count is reported as `CAP+`.
 pub const CARDINALITY_CAP: usize = 10_000;
 
 /// How a single non-blank cell classifies. Stringly-typed throughout: a value

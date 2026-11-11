@@ -8,15 +8,15 @@ Please do not open public issues for security problems.
 
 ## Supported versions
 
-The latest release receives security fixes. Older versions are not supported.
+The latest release receives security fixes. Older versions are not supported. A fix ships in a new release; update the way you installed.
 
 ## What xray can access
 
-xray is a CLI that runs locally on your machine. It reads the CSV or DSV file you point it at, profiles it in a single pass, and prints the result. It is read-only by design: it never writes, edits, or deletes any file, makes no network calls of any kind, has no auth layer, and implements no administrative operations. It can only read files your operating-system user already has access to.
+xray is a CLI that runs locally on your machine. It reads the CSV or DSV file you point it at (or standard input), profiles it in a single pass, and prints the result. It never writes, edits, or deletes the files it profiles. The one write path is `--install-skill`, which writes xray's Claude Code skill to `~/.claude/skills/xray/`; `--uninstall-skill` removes that directory. It makes no network calls of any kind, has no auth layer, and implements no administrative operations. It can only read and write files your operating-system user already has access to.
 
 ## What xray stores
 
-xray stores nothing. There is no config directory, no history file, no cache, no telemetry, no analytics, and no remote logging. It reads a file, writes its report to standard output, and exits.
+xray stores nothing outside the skill directory above. There is no config directory, no history file, no cache, no telemetry, no analytics, and no remote logging. It reads a file, writes its report to standard output, and exits.
 
 ## Verifying releases
 

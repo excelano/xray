@@ -1,6 +1,6 @@
 # xray — a read-only profiler for tabular data
 
-xray is the first move on an unfamiliar CSV or DSV. One pass, one command, and it tells you what the file *is* before you touch it: its shape, what each column really holds, and — the part that earns it a place in your toolkit — what is going to bite you when you clean or query it. You *x-ray* the file, you read the film, and you know your next move.
+xray is the first move on an unfamiliar CSV or DSV. One pass, one command, and it tells you what the file *is* before you touch it: its shape, what each column really holds, and what is going to bite you when you clean or query it. You *x-ray* the file, you read the film, and you know your next move.
 
 **Project page:** [https://excelano.com/xray/](https://excelano.com/xray/)
 
@@ -31,20 +31,20 @@ FINDINGS  (5)   1 correctness · 3 type safety · 1 structure
 
 Every job on a messy CSV starts the same way: orient before acting. What are the columns, what type is each *really*, how many rows, how many blanks, what's the delimiter, is a header even on the first row? That first-contact profiling has been scattered across half a dozen general tools — `qsv`, `csvstat`, `datamash`, `head` — none of which quite answers the question you actually have, which is not "what's the mean of column 4" but *"what's going to break when I touch this?"*
 
-xray answers that. Its **findings** register is a ranked problem list, not more statistics: ragged rows, total rows masquerading as data, leading-zero IDs a cast would mangle, currency trapped as text, mixed-type columns, headers buried under title rows, values padded with spaces or split by case, dates a parser will read the wrong way round. Everything it flags is damage that would corrupt a later step, and every finding names the tool that fixes it.
+xray answers that. Its **findings** register is a ranked problem list, not more statistics: ragged rows, total rows masquerading as data, leading-zero IDs a cast would mangle, currency trapped as text, mixed-type columns, headers buried under title rows, values padded with spaces or split by case, dates a parser will read the wrong way round. Everything it flags is damage that would corrupt a later step, and `--refer` names the tool that fixes each finding.
 
 It is stringly-typed on purpose. `02134` is text, not the number 2134; an 18-digit ID is text, not a rounded float — because silently coercing those is exactly the surprise xray exists to catch. And it only ever *observes*: it never edits a value, drops a row, or filters a result. The day it grows a `--where` it has become a worse query tool.
 
 ## The family
 
-xray is the read-only member of the tabular family, four small tools for messy tabular data split by *what changes*:
+xray is the read-only member of the tabular family, small tools for messy tabular data split by *what changes*:
 
 - **xray** observes — a fixed whole-file profile, and never writes.
 - **[xled](https://github.com/excelano/xled)** edits cell *values* in place (sed and awk for tables).
 - **[xshape](https://github.com/excelano/xshape)** changes the *shape* of the grid, and never touches the values.
-- **[xql](https://github.com/excelano/xql)** queries the row *set* — filter, aggregate, group, sort. A join needs a second table, which is a full SQL engine's job.
+- **[xql](https://github.com/excelano/xql)** queries the row *set* — filter, aggregate, group, sort.
 
-The other three act on the data; xray only looks. Its findings hand you off to them: leading zeros and total rows go to xled for a crop, a column trapped as one delimited cell goes to xshape, currency-cleaned columns go to xql for the query.
+A join needs a second table, which is a SQL engine's job (DuckDB, for one), and converting between office formats is [this2that](https://github.com/excelano/this2that)'s. The others act on the data; xray only looks. With `--refer`, its findings hand you off: a buried header, total rows, currency text, padding and day/month dates go to xled, and once those columns are clean, filtering and aggregating go to xql.
 
 ## Install
 
@@ -103,7 +103,7 @@ xray -d '|' data.csv          # force the delimiter (use \t for tab)
 xray --color never data.csv   # plain output (also automatic when piped)
 ```
 
-xray auto-detects a buried header, sniffs the delimiter (quote-aware), and colours the output for a terminal while emitting plain text to a pipe. Everything it needs, it gathers in a single pass over the file. Both guesses can be overruled: `--header` or `--no-header` for the header row, `-d`/`--delim` for the delimiter.
+xray auto-detects a buried header, sniffs the delimiter (quote-aware), and colors the output for a terminal while emitting plain text to a pipe. Everything it needs, it gathers in a single pass over the file. Both guesses can be overruled: `--header` or `--no-header` for the header row, `-d`/`--delim` for the delimiter.
 
 Input comes from a file argument or from stdin, so xray sits in a pipe like the rest of the family; a piped profile reports its source as `(stdin)` and is otherwise identical to the same bytes read from disk.
 
@@ -120,3 +120,7 @@ xray --install-skill
 That writes `~/.claude/skills/xray/` and stamps in the skill's revision, which `xray -V` also prints, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `xray --uninstall-skill` removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
 The skill is compiled into the binary, so this works the same however you installed xray — apt, Homebrew, cargo, or a build from source.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

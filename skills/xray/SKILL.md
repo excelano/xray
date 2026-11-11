@@ -30,12 +30,12 @@ The authoritative sources for xray's behavior are the binary itself (`xray --hel
 the [README](https://github.com/excelano/xray/blob/main/README.md); if anything here
 conflicts with them, they win. If a flag or section described here is missing from
 `xray --help`, the installed copy predates it: upgrade with `sudo apt install
---only-upgrade xray` (Debian/Ubuntu), `brew upgrade xray` (macOS), or by re-running the
-install one-liner from the README.
+--only-upgrade xray` (Debian/Ubuntu), `brew upgrade xray` (Homebrew), `winget upgrade
+Excelano.xray` (Windows), or `cargo install x-ray` (crates.io).
 
 ## The family, and the one rule that places xray
 
-Four tools, four verbs over the same delimited file, split by *what changes*:
+The family's tools work over the same delimited file, split by *what changes*:
 
 - **xray observes** — profiles the file, reports hazards, changes nothing.
 - **xled edits** — rewrites *cell values* in place (strip currency, restore leading
@@ -44,12 +44,13 @@ Four tools, four verbs over the same delimited file, split by *what changes*:
   *geometry* and never a value (unpivot a wide export, pivot, transpose, split a column,
   explode a delimited cell, merge columns).
 - **xql queries** — set-level questions over the row *set* (filter, aggregate, group,
-  sort, dedupe) in a SQL-shaped query language; a join, which needs a second table, goes
-  to a full SQL engine.
+  sort, dedupe) in a SQL-shaped query language.
+
+A join, which needs a second table, goes to a SQL engine such as DuckDB, and converting
+between office formats goes to this2that.
 
 xray is where you **start** on a file you don't yet trust. It produces no output file and
-takes no destructive action; its whole job is to tell you which of the other three to
-reach for, and why. When you already know the file, skip it.
+takes no destructive action; its job is to tell you which sibling to reach for, and why. When you already know the file, skip it.
 
 ## Running it
 
@@ -76,12 +77,7 @@ data (reported as `(stdin)`). Human output goes to stdout; it is safe to redirec
 pipe. There is **no in-place flag and no write path** — by design, there is nothing for
 xray to write.
 
-Flags: `--refer` (add the opt-in referral block, off by default), `--json` (machine
-output), `--header <ROW>` (1-based; `0` = treat row 1 as data; omit to auto-detect a
-buried header), `--no-header` (the family spelling for `--header 0`; giving both is an
-error), `-d`/`--delim <CHAR>` (override the sniffed delimiter; `\t` spells tab),
-`--color auto|always|never` (auto colours a terminal, goes plain when piped, honours
-`NO_COLOR`).
+The full flag table and the exit codes are in `reference.md`.
 
 ## The three registers (what the output means)
 
@@ -132,7 +128,7 @@ it touches anything. Add `-i` once the preview is right.
 ## The type model (the part that matters)
 
 xray classifies **stringly** — a value stays text until it is unambiguously not — because
-that is exactly the discipline xled and xql rely on. The consequences to internalize:
+that is the discipline xled and xql rely on. The consequences to internalize:
 
 - **Leading zeros stay text.** `0012`, a zip like `02139`, an account number — reported
   as `text · leading-0` with `keep as text`, never as an integer. A numeric cast would
@@ -168,7 +164,7 @@ xray --refer vendor_spend.csv
 # a title block above the real header? force it, or let auto-detect try
 xray --header 4 quarterly_report.csv
 
-# feed the profile to a script (stable class/kind/column keys; no colour)
+# feed the profile to a script (stable class/kind/column keys; no color)
 xray --json vendor_spend.csv | jq '.findings[] | select(.group=="correctness")'
 
 # confirm a file is clean before trusting it
@@ -183,8 +179,10 @@ xray never fixes and never queries — it points. Once you know what's wrong:
   the buried header, compute a column → **xled** (`skills/xled`).
 - **Reshaping the grid** — unpivot a wide export, pivot, transpose, split a column,
   explode a delimited cell, merge columns → **xshape** (`skills/xshape`).
-- **Querying the row set** — join, group, aggregate, sort, dedupe, filter rows in or out
+- **Querying the row set** — group, aggregate, sort, dedupe, filter rows in or out
   → **xql** (`skills/xql`).
+- **Joining tables** — a second table → a SQL engine such as DuckDB.
+- **Converting between office formats** → **this2that**.
 
 If you catch yourself wanting xray to *change* the file or *answer a question about the
 rows*, that's the signal to hand off. xray's job ends at the diagnosis.

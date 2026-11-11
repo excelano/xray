@@ -20,11 +20,11 @@ output file, because xray does not mutate.
 | Flag | Meaning |
 |---|---|
 | `--refer` | also print the REFERRAL block: which family tool (xled / xql) treats each finding, named by column, with a runnable command where the repair is unambiguous. Off by default — the profile stands on its own — but an agent should always pass it |
-| `--json` | emit the profile as JSON instead of the human render. Always plain (no colour). Stable `class` / `kind` / `column` keys for a machine reader |
+| `--json` | emit the profile as JSON instead of the human render. Always plain (no color). Stable `class` / `kind` / `column` keys for a machine reader |
 | `--header <ROW>` | set the header row explicitly, 1-based. `0` means the file has no header (row 1 is data). Out of range is an error, not a clamp. Omit to auto-detect a buried header |
 | `--no-header` | the family spelling for `--header 0`; giving both is an error |
 | `-d`, `--delim <CHAR>` | override the sniffed delimiter; `\t` spells tab |
-| `--color <WHEN>` | `auto` (default) colours a terminal and goes plain when piped or read by a program (honours `NO_COLOR`); `always` forces colour; `never` forces plain |
+| `--color <WHEN>` | `auto` (default) colors a terminal and goes plain when piped or read by a program (honors `NO_COLOR`); `always` forces color; `never` forces plain |
 | `--install-skill` / `--uninstall-skill` | write this skill into `~/.claude/skills/xray/` (or remove it) and exit; safe to re-run |
 | `-V`, `--version` / `-h`, `--help` | standard |
 
@@ -212,7 +212,7 @@ as text). `top` is populated only for the `categorical` class.
 ## What stays stable
 
 The JSON keys above, the `class` and `kind` vocabularies, the `group` and `severity`
-values, and the three exit codes are the contract. Within a major version they are only
+values, and the exit codes are the contract. Within a major version they are only
 ever added to: a new class or kind may appear in a minor release, and nothing is renamed
 or removed. The prose fields — `type`, `detail`, `subject`, `summary`, and the whole human
 render — may be reworded in any release, which is why a machine reader branches on the
@@ -222,6 +222,7 @@ did not know.
 
 ## What xray does not do
 
-No writing, no in-place edit, no output file — cleaning is xled's job. No query, join,
-aggregate, group, sort, pivot, or row filter — that is xql. xray reads and
-reports; the `--refer` block names where to go next.
+No writing, no in-place edit, no output file — cleaning is xled's job. No query,
+aggregate, group, sort, or row filter — that is xql. No pivot or unpivot — that is xshape.
+No join — that is a SQL engine such as DuckDB. xray reads and reports; the `--refer`
+block names where to go next.
