@@ -1,3 +1,6 @@
+# Author: David M. Anderson
+# Built with AI assistance (Claude, Anthropic)
+
 [package]
 name = "x-ray"
 homepage = "https://excelano.com/xray/"
@@ -27,14 +30,9 @@ serde_json = "1.0.150"
 unicode-width = "0.2"
 sha2 = "0.11.1"
 
-[package.metadata.dist]
-# The crate is `x-ray` (bare `xray` was taken), but the command, the Homebrew
-# formula, and every other package coordinate are `xray` — one name to type.
-formula = "xray"
-
 [package.metadata.deb]
-# Same reason as the Homebrew formula: the apt package is `xray`, not the
-# crate name `x-ray`, so it's `apt install xray` like the rest of the family.
+# The crate is `x-ray` (bare `xray` was taken), but the apt package is `xray`
+# like the command, so it's `apt install xray` like the rest of the family.
 name = "xray"
 maintainer = "David M. Anderson <david.anderson@excelano.com>"
 extended-description = """

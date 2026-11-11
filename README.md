@@ -66,19 +66,13 @@ sudo apt install xray && xray --install-skill
 
 Both amd64 and arm64 packages ship with every release.
 
-### Homebrew
-
-```sh
-brew install excelano/tap/xray && xray --install-skill
-```
-
 ### crates.io
 
 ```sh
 cargo install x-ray && xray --install-skill
 ```
 
-crates.io is the one place the name is hyphenated: the bare `xray` crate was taken (a dormant 2018 crate), so the crate publishes as `x-ray`. Everywhere else — the command, the apt package, the Homebrew formula — is `xray`. The installed binary is always `xray`.
+crates.io is the one place the name is hyphenated: the bare `xray` crate was taken (a dormant 2018 crate), so the crate publishes as `x-ray`. Everywhere else, including the command and the apt package, it is `xray`. The installed binary is always `xray`.
 
 ### Windows
 
@@ -119,7 +113,7 @@ xray --install-skill
 
 That writes `~/.claude/skills/xray/` and stamps in the skill's revision, which `xray -V` also prints, so a later run reports whether the skill has fallen behind the binary rather than leaving you to notice. It is safe to re-run: an unchanged skill reports `already current` and nothing is written. `xray --uninstall-skill` removes it. Restart Claude Code afterwards, since skills are discovered at session start.
 
-The skill is compiled into the binary, so this works the same however you installed xray — apt, Homebrew, cargo, or a build from source.
+The skill is compiled into the binary, so this works the same however you installed xray — apt, cargo, or a build from source.
 
 ## License
 

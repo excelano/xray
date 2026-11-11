@@ -30,8 +30,8 @@ The authoritative sources for xray's behavior are the binary itself (`xray --hel
 the [README](https://github.com/excelano/xray/blob/main/README.md); if anything here
 conflicts with them, they win. If a flag or section described here is missing from
 `xray --help`, the installed copy predates it: upgrade with `sudo apt install
---only-upgrade xray` (Debian/Ubuntu), `brew upgrade xray` (Homebrew), `winget upgrade
-Excelano.xray` (Windows), or `cargo install x-ray` (crates.io).
+--only-upgrade xray` (Debian/Ubuntu), `winget upgrade Excelano.xray` (Windows), or
+`cargo install x-ray` (crates.io).
 
 ## The family, and the one rule that places xray
 
