@@ -23,10 +23,10 @@ use std::process::ExitCode;
 use anstream::{AutoStream, ColorChoice};
 use clap::{Parser, ValueEnum};
 
-/// When to colourise the output.
+/// When to colorize the output.
 #[derive(Clone, Copy, ValueEnum)]
 enum ColorWhen {
-    /// Colour for a terminal, plain when piped or read by a program (honours NO_COLOR).
+    /// Color for a terminal, plain when piped or read by a program (honors NO_COLOR).
     Auto,
     Always,
     Never,
@@ -68,7 +68,7 @@ struct Cli {
     #[arg(short, long, value_name = "CHAR", value_parser = parse_delim)]
     delim: Option<u8>,
 
-    /// When to colourise: auto (default), always, or never.
+    /// When to colorize: auto (default), always, or never.
     #[arg(long, value_name = "WHEN", default_value = "auto")]
     color: ColorWhen,
 
