@@ -53,9 +53,5 @@ assets = [
     ["LICENSE", "usr/share/doc/xray/copyright", "644"],
 ]
 
-[profile.dist]
-inherits = "release"
-lto = "thin"
-
 [dev-dependencies]
 unicode-width = "0.2"
